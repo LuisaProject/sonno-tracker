@@ -44,7 +44,7 @@ async function main() {
   const { data: sessioni, error: sessioniError } = await supabaseClient
     .from('sessioni_sonno')
     .select('*')
-    .gte('inizio', rangeStart.toISOString());
+    .or(`fine.is.null,fine.gte.${rangeStart.toISOString()}`);
   if (sessioniError) throw sessioniError;
 
   const soglia = profile.soglia_manuale_ore ?? getSogliaMassimaOre(profile.eta);
