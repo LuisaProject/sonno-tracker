@@ -1,4 +1,5 @@
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './src/config.js';
+import { startSession, endSession, getActiveSession } from './src/queue.js';
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -12,6 +13,8 @@ const el = {
   loginForm: document.getElementById('login-form'),
   loginError: document.getElementById('login-error'),
   profiloForm: document.getElementById('profilo-form'),
+  btnToggle: document.getElementById('btn-toggle-sessione'),
+  timerLive: document.getElementById('timer-live'),
 };
 
 function mostraSchermata(nome) {
@@ -43,6 +46,7 @@ async function dopoLogin() {
   }
   currentProfile = profile;
   mostraSchermata('tracking');
+  aggiornaBottoneStato();
 }
 
 el.loginForm.addEventListener('submit', async (ev) => {
@@ -74,6 +78,53 @@ el.profiloForm.addEventListener('submit', async (ev) => {
   }
   currentProfile = data;
   mostraSchermata('tracking');
+  aggiornaBottoneStato();
 });
+
+const storage = window.localStorage;
+let timerInterval = null;
+
+function aggiornaBottoneStato() {
+  const attiva = getActiveSession(storage);
+  if (attiva) {
+    el.btnToggle.textContent = 'Mi sono alzato';
+    el.timerLive.hidden = false;
+    avviaTimer(attiva.inizio);
+  } else {
+    el.btnToggle.textContent = 'Vado a letto';
+    el.timerLive.hidden = true;
+    fermaTimer();
+  }
+}
+
+function avviaTimer(inizioISO) {
+  fermaTimer();
+  const aggiorna = () => {
+    const ms = Date.now() - new Date(inizioISO).getTime();
+    const ore = Math.floor(ms / 3_600_000);
+    const minuti = Math.floor((ms % 3_600_000) / 60_000);
+    el.timerLive.textContent = `${ore}h ${minuti}m e in corso`;
+  };
+  aggiorna();
+  timerInterval = setInterval(aggiorna, 30_000);
+}
+
+function fermaTimer() {
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = null;
+}
+
+function onToggleSessione() {
+  const attiva = getActiveSession(storage);
+  if (!attiva) {
+    const id = crypto.randomUUID();
+    startSession(storage, id, new Date().toISOString());
+  } else {
+    endSession(storage, attiva.id, new Date().toISOString());
+  }
+  aggiornaBottoneStato();
+}
+
+el.btnToggle.addEventListener('click', onToggleSessione);
 
 init();
