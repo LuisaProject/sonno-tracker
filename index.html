@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sonno Tracker</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main id="app">
+    <section id="login-screen" hidden>
+      <h1>Accedi</h1>
+      <form id="login-form">
+        <input type="email" id="login-email" placeholder="Email" required />
+        <input type="password" id="login-password" placeholder="Password" required />
+        <button type="submit">Accedi</button>
+      </form>
+      <p id="login-error" class="errore" hidden></p>
+    </section>
+
+    <section id="profilo-screen" hidden>
+      <h1>Il tuo profilo</h1>
+      <form id="profilo-form">
+        <input type="text" id="profilo-nome" placeholder="Nome" required />
+        <input type="number" id="profilo-eta" placeholder="Età" required min="0" max="120" />
+        <button type="submit">Salva</button>
+      </form>
+    </section>
+
+    <section id="tracking-screen" hidden>
+      <button id="btn-toggle-sessione" class="btn-principale">Vado a letto</button>
+      <p id="timer-live" hidden></p>
+      <p id="sync-indicator" class="sync-indicator" hidden>salvato, in sincronizzazione…</p>
+
+      <div id="riquadro-soglia" class="riquadro-soglia" hidden></div>
+
+      <section id="storico">
+        <div id="periodo-selector">
+          <button data-periodo="giorno" class="periodo-attivo">Giorno</button>
+          <button data-periodo="settimana">Settimana</button>
+          <button data-periodo="mese">Mese</button>
+          <button data-periodo="anno">Anno</button>
+        </div>
+        <canvas id="grafico-storico"></canvas>
+      </section>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

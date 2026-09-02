@@ -1,0 +1,89 @@
+:root {
+  color-scheme: light;
+  --colore-neutro: #546e7a;
+  --colore-allerta: #e53935;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #fafafa;
+}
+
+#app {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+input, button {
+  padding: 12px;
+  font-size: 1rem;
+  border-radius: 8px;
+  border: 1px solid #cfd8dc;
+}
+
+.btn-principale {
+  width: 100%;
+  padding: 24px;
+  font-size: 1.4rem;
+  border: none;
+  border-radius: 12px;
+  background: var(--colore-neutro);
+  color: #fff;
+}
+
+#timer-live {
+  text-align: center;
+  font-size: 1.1rem;
+  color: #37474f;
+}
+
+.riquadro-soglia {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 12px;
+  background: #eceff1;
+  text-align: center;
+  font-size: 1.2rem;
+}
+
+.riquadro-soglia.sforamento {
+  background: var(--colore-allerta);
+  color: #fff;
+}
+
+.sync-indicator {
+  font-size: 0.8rem;
+  color: #90a4ae;
+  margin-top: 8px;
+  text-align: center;
+}
+
+#periodo-selector {
+  display: flex;
+  justify-content: space-around;
+  margin: 16px 0 8px;
+}
+
+#periodo-selector button {
+  border: none;
+  background: none;
+  color: #546e7a;
+}
+
+.periodo-attivo {
+  font-weight: bold;
+  text-decoration: underline;
+}
+
+.errore {
+  color: var(--colore-allerta);
+  text-align: center;
+}
