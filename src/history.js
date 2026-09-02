@@ -1,13 +1,13 @@
-export function millisecondiOverlap(sessione, rangeStart, rangeEnd) {
+export function millisecondiOverlap(sessione, rangeStart, rangeEnd, now = new Date()) {
   const inizio = new Date(sessione.inizio).getTime();
-  const fine = sessione.fine ? new Date(sessione.fine).getTime() : Date.now();
+  const fine = sessione.fine ? new Date(sessione.fine).getTime() : now.getTime();
   const start = Math.max(inizio, rangeStart.getTime());
   const end = Math.min(fine, rangeEnd.getTime());
   return Math.max(0, end - start);
 }
 
-export function sommaOreInRange(sessions, rangeStart, rangeEnd) {
-  const ms = sessions.reduce((tot, s) => tot + millisecondiOverlap(s, rangeStart, rangeEnd), 0);
+export function sommaOreInRange(sessions, rangeStart, rangeEnd, now = new Date()) {
+  const ms = sessions.reduce((tot, s) => tot + millisecondiOverlap(s, rangeStart, rangeEnd, now), 0);
   return ms / 3_600_000;
 }
 
@@ -18,7 +18,7 @@ export function buildDayView(sessions, now = new Date()) {
     const inizioOra = new Date(fineOra.getTime() - 3_600_000);
     punti.push({
       label: `${fineOra.getHours()}:00`,
-      ore: sommaOreInRange(sessions, inizioOra, fineOra),
+      ore: sommaOreInRange(sessions, inizioOra, fineOra, now),
     });
   }
   return punti;
@@ -30,14 +30,21 @@ function inizioGiorno(data) {
   return d;
 }
 
+function formattaDataLocale(data) {
+  const anno = data.getFullYear();
+  const mese = String(data.getMonth() + 1).padStart(2, '0');
+  const giorno = String(data.getDate()).padStart(2, '0');
+  return `${anno}-${mese}-${giorno}`;
+}
+
 function buildTotaliGiornalieri(sessions, now, giorni) {
   const punti = [];
   for (let i = giorni - 1; i >= 0; i--) {
     const giornoInizio = inizioGiorno(new Date(now.getTime() - i * 86_400_000));
     const giornoFine = new Date(giornoInizio.getTime() + 86_400_000);
     punti.push({
-      label: giornoInizio.toISOString().slice(0, 10),
-      ore: sommaOreInRange(sessions, giornoInizio, giornoFine),
+      label: formattaDataLocale(giornoInizio),
+      ore: sommaOreInRange(sessions, giornoInizio, giornoFine, now),
     });
   }
   return punti;
@@ -59,7 +66,7 @@ export function buildYearView(sessions, now = new Date()) {
     const meseFineCompleto = new Date(meseData.getFullYear(), meseData.getMonth() + 1, 1);
     const rangeFine = meseFineCompleto.getTime() > now.getTime() ? now : meseFineCompleto;
     const giorniTrascorsi = Math.max(1, Math.round((rangeFine.getTime() - meseInizio.getTime()) / 86_400_000));
-    const totale = sommaOreInRange(sessions, meseInizio, rangeFine);
+    const totale = sommaOreInRange(sessions, meseInizio, rangeFine, now);
     punti.push({
       label: `${meseInizio.getFullYear()}-${String(meseInizio.getMonth() + 1).padStart(2, '0')}`,
       ore: totale / giorniTrascorsi,
