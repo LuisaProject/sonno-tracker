@@ -2,6 +2,8 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './src/config.js';
 import { startSession, endSession, getActiveSession } from './src/queue.js';
 import { syncQueue } from './src/sync.js';
 import { loadQueue } from './src/queue.js';
+import { getSogliaMassimaOre, calcolaSforamentoOre, formattaOreMinuti } from './src/soglia.js';
+import { buildDayView, buildWeekView, buildMonthView, buildYearView, sommaOreInRange } from './src/history.js';
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -18,6 +20,9 @@ const el = {
   btnToggle: document.getElementById('btn-toggle-sessione'),
   timerLive: document.getElementById('timer-live'),
   syncIndicator: document.getElementById('sync-indicator'),
+  riquadroSoglia: document.getElementById('riquadro-soglia'),
+  periodoSelector: document.getElementById('periodo-selector'),
+  graficoCanvas: document.getElementById('grafico-storico'),
 };
 
 function mostraSchermata(nome) {
@@ -142,8 +147,84 @@ async function sincronizza() {
     if (error) throw error;
   });
   el.syncIndicator.hidden = loadQueue(storage).length === 0;
+  await renderStorico();
 }
 
 window.addEventListener('online', sincronizza);
+
+let chart = null;
+let periodoAttivo = 'giorno';
+
+el.periodoSelector.addEventListener('click', (ev) => {
+  const periodo = ev.target.dataset.periodo;
+  if (!periodo) return;
+  periodoAttivo = periodo;
+  document.querySelectorAll('#periodo-selector button').forEach((b) => b.classList.remove('periodo-attivo'));
+  ev.target.classList.add('periodo-attivo');
+  renderStorico();
+});
+
+async function renderStorico() {
+  const { data: sessioni } = await supabaseClient
+    .from('sessioni_sonno')
+    .select('*')
+    .order('inizio', { ascending: true });
+
+  const soglia = currentProfile.soglia_manuale_ore ?? getSogliaMassimaOre(currentProfile.eta);
+  const now = new Date();
+  const costruisciPunti = { giorno: buildDayView, settimana: buildWeekView, mese: buildMonthView, anno: buildYearView }[periodoAttivo];
+  const punti = costruisciPunti(sessioni ?? [], now);
+
+  disegnaGrafico(punti, soglia);
+  aggiornaRiquadroSoglia(sessioni ?? [], soglia, now);
+}
+
+function disegnaGrafico(punti, soglia) {
+  const colori = punti.map((p) => (p.ore > soglia ? '#e53935' : '#546e7a'));
+  const dati = {
+    labels: punti.map((p) => p.label),
+    datasets: [
+      {
+        label: 'Ore a letto',
+        data: punti.map((p) => p.ore),
+        borderColor: '#546e7a',
+        pointBackgroundColor: colori,
+        pointBorderColor: colori,
+        segment: { borderColor: (ctx) => (ctx.p1.parsed.y > soglia ? '#e53935' : '#546e7a') },
+      },
+      {
+        label: 'Soglia',
+        data: punti.map(() => soglia),
+        borderColor: '#b0bec5',
+        borderDash: [6, 6],
+        pointRadius: 0,
+      },
+    ],
+  };
+  if (chart) {
+    chart.data = dati;
+    chart.update();
+  } else {
+    chart = new Chart(el.graficoCanvas, { type: 'line', data: dati, options: { responsive: true } });
+  }
+}
+
+function aggiornaRiquadroSoglia(sessioni, soglia, now) {
+  if (periodoAttivo !== 'giorno') {
+    el.riquadroSoglia.hidden = true;
+    return;
+  }
+  const rangeStart = new Date(now.getTime() - 24 * 3_600_000);
+  const oreALetto = sommaOreInRange(sessioni, rangeStart, now);
+  const sforamento = calcolaSforamentoOre(oreALetto, soglia);
+  el.riquadroSoglia.hidden = false;
+  if (sforamento > 0) {
+    el.riquadroSoglia.classList.add('sforamento');
+    el.riquadroSoglia.textContent = `Hai superato di ${formattaOreMinuti(sforamento)}`;
+  } else {
+    el.riquadroSoglia.classList.remove('sforamento');
+    el.riquadroSoglia.textContent = `${formattaOreMinuti(oreALetto)} nelle ultime 24 ore`;
+  }
+}
 
 init();
