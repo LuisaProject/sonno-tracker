@@ -165,6 +165,7 @@ el.periodoSelector.addEventListener('click', (ev) => {
 });
 
 async function renderStorico() {
+  if (!currentProfile) return;
   const { data: sessioni } = await supabaseClient
     .from('sessioni_sonno')
     .select('*')
@@ -191,6 +192,12 @@ function disegnaGrafico(punti, soglia) {
         pointBackgroundColor: colori,
         pointBorderColor: colori,
         segment: { borderColor: (ctx) => (ctx.p1.parsed.y > soglia ? '#e53935' : '#546e7a') },
+        fill: {
+          target: 1,
+          above: 'rgba(229, 57, 53, 0.15)',
+          below: 'transparent',
+        },
+        order: 1,
       },
       {
         label: 'Soglia',
@@ -198,6 +205,8 @@ function disegnaGrafico(punti, soglia) {
         borderColor: '#b0bec5',
         borderDash: [6, 6],
         pointRadius: 0,
+        fill: false,
+        order: 2,
       },
     ],
   };
