@@ -1,5 +1,7 @@
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './src/config.js';
 import { startSession, endSession, getActiveSession } from './src/queue.js';
+import { syncQueue } from './src/sync.js';
+import { loadQueue } from './src/queue.js';
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -15,6 +17,7 @@ const el = {
   profiloForm: document.getElementById('profilo-form'),
   btnToggle: document.getElementById('btn-toggle-sessione'),
   timerLive: document.getElementById('timer-live'),
+  syncIndicator: document.getElementById('sync-indicator'),
 };
 
 function mostraSchermata(nome) {
@@ -47,6 +50,7 @@ async function dopoLogin() {
   currentProfile = profile;
   mostraSchermata('tracking');
   aggiornaBottoneStato();
+  await sincronizza();
 }
 
 el.loginForm.addEventListener('submit', async (ev) => {
@@ -79,6 +83,7 @@ el.profiloForm.addEventListener('submit', async (ev) => {
   currentProfile = data;
   mostraSchermata('tracking');
   aggiornaBottoneStato();
+  await sincronizza();
 });
 
 const storage = window.localStorage;
@@ -123,8 +128,22 @@ function onToggleSessione() {
     endSession(storage, attiva.id, new Date().toISOString());
   }
   aggiornaBottoneStato();
+  sincronizza();
 }
 
 el.btnToggle.addEventListener('click', onToggleSessione);
+
+async function sincronizza() {
+  if (loadQueue(storage).length > 0) {
+    el.syncIndicator.hidden = false;
+  }
+  await syncQueue(storage, currentUser.id, async (row) => {
+    const { error } = await supabaseClient.from('sessioni_sonno').upsert(row);
+    if (error) throw error;
+  });
+  el.syncIndicator.hidden = loadQueue(storage).length === 0;
+}
+
+window.addEventListener('online', sincronizza);
 
 init();
