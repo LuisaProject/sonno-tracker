@@ -152,6 +152,10 @@ async function sincronizza() {
 
 window.addEventListener('online', sincronizza);
 
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
+}
+
 let chart = null;
 let periodoAttivo = 'giorno';
 
