@@ -1,4 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#546e7a"/>
-  <text x="256" y="320" font-size="220" text-anchor="middle" fill="#ffffff" font-family="sans-serif">Z</text>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#37474f"/>
+      <stop offset="1" stop-color="#546e7a"/>
+    </linearGradient>
+    <mask id="moon-mask">
+      <rect width="512" height="512" fill="black"/>
+      <circle cx="256" cy="256" r="118" fill="white"/>
+      <circle cx="308" cy="218" r="98" fill="black"/>
+    </mask>
+  </defs>
+  <rect width="512" height="512" fill="url(#g)"/>
+  <rect width="512" height="512" fill="#ffffff" mask="url(#moon-mask)"/>
+  <circle cx="150" cy="150" r="9" fill="#ffffff" opacity="0.85"/>
+  <circle cx="192" cy="112" r="5.5" fill="#ffffff" opacity="0.65"/>
+  <circle cx="118" cy="200" r="5" fill="#ffffff" opacity="0.55"/>
 </svg>
