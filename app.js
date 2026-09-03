@@ -1,9 +1,10 @@
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './src/config.js';
-import { startSession, endSession, getActiveSession } from './src/queue.js';
+import { startSession, endSession, getActiveSession, removeSession } from './src/queue.js';
 import { syncQueue } from './src/sync.js';
 import { loadQueue } from './src/queue.js';
 import { getSogliaMassimaOre, calcolaSforamentoOre, formattaOreMinuti } from './src/soglia.js';
 import { buildDayView, buildWeekView, buildMonthView, buildYearView, sommaOreInRange } from './src/history.js';
+import { formattaRigaSessione } from './src/sessioni-recenti.js';
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -23,6 +24,7 @@ const el = {
   riquadroSoglia: document.getElementById('riquadro-soglia'),
   periodoSelector: document.getElementById('periodo-selector'),
   graficoCanvas: document.getElementById('grafico-storico'),
+  listaSessioniRecenti: document.getElementById('lista-sessioni-recenti'),
 };
 
 function mostraSchermata(nome) {
@@ -148,6 +150,7 @@ async function sincronizza() {
   });
   el.syncIndicator.hidden = loadQueue(storage).length === 0;
   await renderStorico();
+  await renderSessioniRecenti();
 }
 
 window.addEventListener('online', sincronizza);
@@ -238,6 +241,75 @@ function aggiornaRiquadroSoglia(sessioni, soglia, now) {
     el.riquadroSoglia.classList.remove('sforamento');
     el.riquadroSoglia.textContent = `${formattaOreMinuti(oreALetto)} nelle ultime 24 ore`;
   }
+}
+
+async function renderSessioniRecenti() {
+  const { data: sessioni, error } = await supabaseClient
+    .from('sessioni_sonno')
+    .select('*')
+    .order('inizio', { ascending: false })
+    .limit(10);
+  if (error) {
+    console.error(error);
+    return;
+  }
+
+  el.listaSessioniRecenti.innerHTML = '';
+  for (const sessione of sessioni ?? []) {
+    const riga = formattaRigaSessione(sessione);
+    const li = document.createElement('li');
+    li.className = 'sessione-recente';
+
+    const testo = document.createElement('span');
+    testo.textContent = `${riga.inizioLabel} → ${riga.fineLabel}`;
+    li.appendChild(testo);
+
+    if (riga.inCorso) {
+      const btnChiudi = document.createElement('button');
+      btnChiudi.textContent = 'Chiudi ora';
+      btnChiudi.addEventListener('click', () => chiudiSessioneOra(sessione.id));
+      li.appendChild(btnChiudi);
+    }
+
+    const btnElimina = document.createElement('button');
+    btnElimina.textContent = 'Elimina';
+    btnElimina.addEventListener('click', () => eliminaSessione(sessione.id));
+    li.appendChild(btnElimina);
+
+    el.listaSessioniRecenti.appendChild(li);
+  }
+}
+
+function sincronizzaCodaLocale(id, fineISO) {
+  const attiva = getActiveSession(storage);
+  if (!attiva || attiva.id !== id) return;
+  if (fineISO) endSession(storage, id, fineISO);
+  removeSession(storage, id);
+  aggiornaBottoneStato();
+}
+
+async function chiudiSessioneOra(id) {
+  const fineISO = new Date().toISOString();
+  const { error } = await supabaseClient.from('sessioni_sonno').update({ fine: fineISO }).eq('id', id);
+  if (error) {
+    alert(error.message);
+    return;
+  }
+  sincronizzaCodaLocale(id, fineISO);
+  await renderSessioniRecenti();
+  await renderStorico();
+}
+
+async function eliminaSessione(id) {
+  if (!confirm('Eliminare definitivamente questa sessione? Non è possibile annullare.')) return;
+  const { error } = await supabaseClient.from('sessioni_sonno').delete().eq('id', id);
+  if (error) {
+    alert(error.message);
+    return;
+  }
+  sincronizzaCodaLocale(id, null);
+  await renderSessioniRecenti();
+  await renderStorico();
 }
 
 init();

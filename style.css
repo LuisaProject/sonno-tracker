@@ -87,3 +87,37 @@ input, button {
   color: var(--colore-allerta);
   text-align: center;
 }
+
+#sessioni-recenti {
+  margin-top: 24px;
+}
+
+#sessioni-recenti h2 {
+  font-size: 1rem;
+  color: #37474f;
+}
+
+#lista-sessioni-recenti {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sessione-recente {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #eceff1;
+  font-size: 0.9rem;
+}
+
+.sessione-recente button {
+  padding: 6px 10px;
+  font-size: 0.8rem;
+}

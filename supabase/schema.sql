@@ -34,4 +34,7 @@ create policy "sessioni_insert_own" on sessioni_sonno
 create policy "sessioni_update_own" on sessioni_sonno
   for update using (auth.uid() = user_id);
 
+create policy "sessioni_delete_own" on sessioni_sonno
+  for delete using (auth.uid() = user_id);
+
 create index if not exists sessioni_sonno_user_inizio_idx on sessioni_sonno (user_id, inizio desc);
