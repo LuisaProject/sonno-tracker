@@ -1,3 +1,17 @@
+export function isOraDiurna(iso, timeZone = 'Europe/Rome') {
+  const ora = Number(
+    new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', hour12: false }).format(new Date(iso))
+  );
+  return ora >= 8 && ora < 20;
+}
+
+export function isRientroDiurno(sessione, now, timeZone = 'Europe/Rome') {
+  const inizio = new Date(sessione.inizio);
+  const diffMs = now.getTime() - inizio.getTime();
+  const entroFinestra = diffMs >= 0 && diffMs <= 20 * 60_000;
+  return entroFinestra && isOraDiurna(sessione.inizio, timeZone);
+}
+
 export function millisecondiOverlap(sessione, rangeStart, rangeEnd, now = new Date()) {
   const inizio = new Date(sessione.inizio).getTime();
   const fine = sessione.fine ? new Date(sessione.fine).getTime() : now.getTime();

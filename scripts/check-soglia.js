@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { getSogliaMassimaOre, calcolaSforamentoOre, formattaOreMinuti } from '../src/soglia.js';
-import { sommaOreInRange } from '../src/history.js';
+import { sommaOreInRange, isRientroDiurno } from '../src/history.js';
 
 export function isOrarioInvio(now, timeZone = 'Europe/Rome') {
   const parts = new Intl.DateTimeFormat('en-GB', {
@@ -41,17 +41,36 @@ export async function inviaMessaggioTelegram(testo) {
   }
 }
 
+export async function controllaRientriDiurni(supabaseClient, profile, now) {
+  const rangeStart20 = new Date(now.getTime() - 20 * 60_000);
+  const { data: sessioniRecenti, error } = await supabaseClient
+    .from('sessioni_sonno')
+    .select('*')
+    .gte('inizio', rangeStart20.toISOString());
+  if (error) throw error;
+
+  for (const sessione of sessioniRecenti ?? []) {
+    if (isRientroDiurno(sessione, now)) {
+      const messaggio = `${profile.nome}, sei tornato a letto di giorno 🌤️\n${sceglifraseMotivazionale(profile.nome)}`;
+      await inviaMessaggioTelegram(messaggio);
+      console.log('Messaggio rientro diurno inviato.');
+    }
+  }
+}
+
 async function main() {
   const now = new Date();
-  if (!isOrarioInvio(now)) {
-    console.log("Non è l'orario di invio, esco.");
-    return;
-  }
-
   const supabaseClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
   const { data: profile, error: profileError } = await supabaseClient.from('profiles').select('*').single();
   if (profileError) throw profileError;
+
+  await controllaRientriDiurni(supabaseClient, profile, now);
+
+  if (!isOrarioInvio(now)) {
+    console.log("Non è l'orario di invio, esco.");
+    return;
+  }
 
   const rangeStart = new Date(now.getTime() - 24 * 3_600_000);
   const { data: sessioni, error: sessioniError } = await supabaseClient
