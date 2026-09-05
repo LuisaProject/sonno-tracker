@@ -15,6 +15,18 @@ test('isOrarioInvio: vero quando sono le 18:00 a Roma in ora legale', () => {
   assert.equal(isOrarioInvio(now), true);
 });
 
+test('isOrarioInvio: vero fino alle 18:14 (tollera il ritardo del cron)', () => {
+  // 2026-01-15 17:14 UTC = 18:14 CET
+  const now = new Date('2026-01-15T17:14:00.000Z');
+  assert.equal(isOrarioInvio(now), true);
+});
+
+test('isOrarioInvio: falso dalle 18:15 in poi', () => {
+  // 2026-01-15 17:15 UTC = 18:15 CET
+  const now = new Date('2026-01-15T17:15:00.000Z');
+  assert.equal(isOrarioInvio(now), false);
+});
+
 test('isOrarioInvio: falso in altri orari', () => {
   const now = new Date('2026-01-15T12:00:00.000Z');
   assert.equal(isOrarioInvio(now), false);

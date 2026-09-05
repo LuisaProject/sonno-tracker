@@ -11,7 +11,7 @@ export function isOrarioInvio(now, timeZone = 'Europe/Rome') {
   }).formatToParts(now);
   const ora = parts.find((p) => p.type === 'hour').value;
   const minuti = parts.find((p) => p.type === 'minute').value;
-  return ora === '18' && minuti === '00';
+  return ora === '18' && Number(minuti) < 15;
 }
 
 export async function inviaMessaggioTelegram(testo) {
