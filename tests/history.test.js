@@ -95,10 +95,10 @@ test('isRientroDiurno: falso per un inizio alle 21:30 (fuori dalla fascia diurna
   assert.equal(isRientroDiurno(sessione, now), false);
 });
 
-test('contaGiorniSenzaRientri: nessuna sessione mai, gestito senza errori', () => {
+test('contaGiorniSenzaRientri: nessuna sessione mai -> 0 (nessuno storico da mostrare come pulito)', () => {
   const oggi = new Date('2026-01-15T12:00:00.000Z');
   assert.doesNotThrow(() => contaGiorniSenzaRientri([], oggi));
-  assert.equal(contaGiorniSenzaRientri([], oggi), 365);
+  assert.equal(contaGiorniSenzaRientri([], oggi), 0);
 });
 
 test('contaGiorniSenzaRientri: un rientro diurno 3 giorni fa -> streak 2', () => {

@@ -22,6 +22,8 @@ function dataLocale(iso, timeZone) {
 }
 
 export function contaGiorniSenzaRientri(sessioni, oggi, timeZone = 'Europe/Rome', limite = 365) {
+  if (sessioni.length === 0) return 0;
+
   const giorniConRientro = new Set(
     sessioni.filter((s) => isOraDiurna(s.inizio, timeZone)).map((s) => dataLocale(s.inizio, timeZone))
   );
