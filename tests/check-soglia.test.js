@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isOrarioInvio } from '../scripts/check-soglia.js';
+import { isOrarioInvio, sceglifraseMotivazionale } from '../scripts/check-soglia.js';
 import { sommaOreInRange } from '../src/history.js';
 
 test('isOrarioInvio: vero quando sono le 18:00 a Roma', () => {
@@ -46,4 +46,18 @@ test('sommaOreInRange: sessione aperta iniziata prima di 24h rientra nella fines
   // Overlap: dalle 14:00 del 2 set alle 14:00 del 3 set = 24 ore
   const ore = sommaOreInRange(sessioneAperta, rangeStart, now, now);
   assert.equal(ore, 24);
+});
+
+test('sceglifraseMotivazionale: sceglie la frase in base a randomFn e sostituisce {nome}', () => {
+  const frasiAttese = [
+    "Mario, dai, impegnati un po' di più: ce la puoi fare! 💪",
+    'Mario, un piccolo sforzo in più stasera e domani ti senti meglio. Forza!',
+    'Coraggio Mario, un passo alla volta si migliora. Puoi farcela!',
+    'Mario, oggi è andata così, ma domani puoi fare meglio. Non mollare!',
+    'Piccoli aggiustamenti, grandi risultati: Mario, sei sulla buona strada. Spingi un po\' di più!',
+  ];
+  frasiAttese.forEach((atteso, indice) => {
+    const randomFn = () => indice / frasiAttese.length;
+    assert.equal(sceglifraseMotivazionale('Mario', randomFn), atteso);
+  });
 });

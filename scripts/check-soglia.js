@@ -14,6 +14,19 @@ export function isOrarioInvio(now, timeZone = 'Europe/Rome') {
   return ora === '18' && Number(minuti) < 15;
 }
 
+const FRASI_MOTIVAZIONALI = [
+  '{nome}, dai, impegnati un po\' di più: ce la puoi fare! 💪',
+  '{nome}, un piccolo sforzo in più stasera e domani ti senti meglio. Forza!',
+  'Coraggio {nome}, un passo alla volta si migliora. Puoi farcela!',
+  '{nome}, oggi è andata così, ma domani puoi fare meglio. Non mollare!',
+  'Piccoli aggiustamenti, grandi risultati: {nome}, sei sulla buona strada. Spingi un po\' di più!',
+];
+
+export function sceglifraseMotivazionale(nome, randomFn = Math.random) {
+  const indice = Math.floor(randomFn() * FRASI_MOTIVAZIONALI.length);
+  return FRASI_MOTIVAZIONALI[indice].replaceAll('{nome}', nome);
+}
+
 export async function inviaMessaggioTelegram(testo) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
@@ -56,7 +69,7 @@ async function main() {
     return;
   }
 
-  const messaggio = `Hai superato di ${formattaOreMinuti(sforamento)} il limite consigliato per la tua età (${soglia}h).`;
+  const messaggio = `Hai superato di ${formattaOreMinuti(sforamento)} il limite consigliato per la tua età (${soglia}h).\n${sceglifraseMotivazionale(profile.nome)}`;
   await inviaMessaggioTelegram(messaggio);
   console.log('Messaggio Telegram inviato.');
 }
