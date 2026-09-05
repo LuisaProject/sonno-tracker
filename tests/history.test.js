@@ -1,7 +1,7 @@
 // tests/history.test.js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sommaOreInRange, buildDayView, buildWeekView, buildYearView, buildMonthView, isRientroDiurno } from '../src/history.js';
+import { sommaOreInRange, buildDayView, buildWeekView, buildYearView, buildMonthView, isRientroDiurno, contaGiorniSenzaRientri } from '../src/history.js';
 
 const sessioneUnaNotte = [
   { id: '1', inizio: '2026-09-02T22:00:00.000Z', fine: '2026-09-03T06:00:00.000Z' },
@@ -93,4 +93,22 @@ test('isRientroDiurno: falso per un inizio alle 21:30 (fuori dalla fascia diurna
   const sessione = { inizio: '2026-01-15T20:30:00.000Z', fine: null }; // 21:30 a Roma
   const now = new Date('2026-01-15T20:35:00.000Z'); // 5 minuti dopo, entro la finestra
   assert.equal(isRientroDiurno(sessione, now), false);
+});
+
+test('contaGiorniSenzaRientri: nessuna sessione mai, gestito senza errori', () => {
+  const oggi = new Date('2026-01-15T12:00:00.000Z');
+  assert.doesNotThrow(() => contaGiorniSenzaRientri([], oggi));
+  assert.equal(contaGiorniSenzaRientri([], oggi), 365);
+});
+
+test('contaGiorniSenzaRientri: un rientro diurno 3 giorni fa -> streak 2', () => {
+  const oggi = new Date('2026-01-15T12:00:00.000Z');
+  const sessioni = [{ inizio: '2026-01-12T09:00:00.000Z', fine: null }]; // 10:00 a Roma, 3 giorni fa
+  assert.equal(contaGiorniSenzaRientri(sessioni, oggi), 2);
+});
+
+test('contaGiorniSenzaRientri: un rientro diurno ieri -> streak 0', () => {
+  const oggi = new Date('2026-01-15T12:00:00.000Z');
+  const sessioni = [{ inizio: '2026-01-14T09:00:00.000Z', fine: null }]; // 10:00 a Roma, ieri
+  assert.equal(contaGiorniSenzaRientri(sessioni, oggi), 0);
 });

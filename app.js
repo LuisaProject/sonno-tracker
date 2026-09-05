@@ -3,7 +3,7 @@ import { startSession, endSession, getActiveSession, removeSession } from './src
 import { syncQueue } from './src/sync.js';
 import { loadQueue } from './src/queue.js';
 import { getSogliaMassimaOre, calcolaStatoAnello } from './src/soglia.js';
-import { buildDayView, buildWeekView, buildMonthView, buildYearView, sommaOreInRange } from './src/history.js';
+import { buildDayView, buildWeekView, buildMonthView, buildYearView, sommaOreInRange, contaGiorniSenzaRientri } from './src/history.js';
 import { formattaRigaSessione } from './src/sessioni-recenti.js';
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -28,6 +28,7 @@ const el = {
   periodoSelector: document.getElementById('periodo-selector'),
   graficoCanvas: document.getElementById('grafico-storico'),
   listaSessioniRecenti: document.getElementById('lista-sessioni-recenti'),
+  streakRientri: document.getElementById('streak-rientri'),
 };
 
 function mostraSchermata(nome) {
@@ -188,6 +189,13 @@ async function renderStorico() {
 
   disegnaGrafico(punti, soglia);
   aggiornaRiquadroSoglia(sessioni ?? [], soglia, now);
+  aggiornaStreakRientri(sessioni ?? [], now);
+}
+
+function aggiornaStreakRientri(sessioni, now) {
+  const giorni = contaGiorniSenzaRientri(sessioni, now);
+  el.streakRientri.hidden = false;
+  el.streakRientri.textContent = `🔥 ${giorni} giorni senza rientri diurni`;
 }
 
 function disegnaGrafico(punti, soglia) {

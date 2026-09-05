@@ -12,6 +12,29 @@ export function isRientroDiurno(sessione, now, timeZone = 'Europe/Rome') {
   return entroFinestra && isOraDiurna(sessione.inizio, timeZone);
 }
 
+function dataLocale(iso, timeZone) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(iso));
+}
+
+export function contaGiorniSenzaRientri(sessioni, oggi, timeZone = 'Europe/Rome', limite = 365) {
+  const giorniConRientro = new Set(
+    sessioni.filter((s) => isOraDiurna(s.inizio, timeZone)).map((s) => dataLocale(s.inizio, timeZone))
+  );
+
+  let streak = 0;
+  for (let i = 1; i <= limite; i++) {
+    const giorno = new Date(oggi.getTime() - i * 86_400_000);
+    if (giorniConRientro.has(dataLocale(giorno.toISOString(), timeZone))) break;
+    streak++;
+  }
+  return streak;
+}
+
 export function millisecondiOverlap(sessione, rangeStart, rangeEnd, now = new Date()) {
   const inizio = new Date(sessione.inizio).getTime();
   const fine = sessione.fine ? new Date(sessione.fine).getTime() : now.getTime();
