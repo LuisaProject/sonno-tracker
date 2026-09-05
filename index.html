@@ -35,7 +35,19 @@
       <p id="timer-live" hidden></p>
       <p id="sync-indicator" class="sync-indicator" hidden>salvato, in sincronizzazione…</p>
 
-      <div id="riquadro-soglia" class="riquadro-soglia" hidden></div>
+      <div id="anello-soglia" class="anello-soglia" hidden>
+        <svg id="anello-svg" viewBox="0 0 240 240" width="240" height="240">
+          <circle class="anello-sfondo" cx="120" cy="120" r="108" stroke-width="16" fill="none" />
+          <circle id="anello-progresso" cx="120" cy="120" r="108" stroke-width="16" fill="none"
+                  stroke-linecap="round" transform="rotate(-90 120 120)" />
+        </svg>
+        <div class="anello-testo">
+          <span id="anello-numero"></span>
+          <span id="anello-sottotitolo"></span>
+        </div>
+      </div>
+
+      <p id="streak-rientri" class="streak-rientri" hidden></p>
 
       <section id="storico">
         <div id="periodo-selector">

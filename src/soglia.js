@@ -19,3 +19,16 @@ export function formattaOreMinuti(oreDecimali) {
   const minuti = totaleMinuti % 60;
   return `${ore}h ${minuti}m`;
 }
+
+export function calcolaStatoAnello(oreALetto, sogliaOre) {
+  const percentuale = Math.min(oreALetto / sogliaOre, 1);
+  const sottoSoglia = oreALetto <= sogliaOre;
+  return {
+    percentuale,
+    colore: sottoSoglia ? '#2e7d4f' : '#e53935',
+    testo: sottoSoglia
+      ? formattaOreMinuti(sogliaOre - oreALetto)
+      : `+${formattaOreMinuti(oreALetto - sogliaOre)}`,
+    sottotitolo: sottoSoglia ? 'ore rimaste oggi' : 'superate',
+  };
+}

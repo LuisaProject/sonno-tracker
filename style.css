@@ -45,18 +45,51 @@ input, button {
   color: #37474f;
 }
 
-.riquadro-soglia {
-  margin-top: 16px;
-  padding: 16px;
-  border-radius: 12px;
-  background: #eceff1;
-  text-align: center;
-  font-size: 1.2rem;
+.anello-soglia {
+  position: relative;
+  width: 240px;
+  height: 240px;
+  margin: 16px auto 0;
 }
 
-.riquadro-soglia.sforamento {
-  background: var(--colore-allerta);
-  color: #fff;
+.anello-sfondo {
+  stroke: #eceff1;
+}
+
+#anello-progresso {
+  transition: stroke-dasharray 0.3s ease, stroke 0.3s ease;
+}
+
+.anello-testo {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+#anello-numero {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #37474f;
+}
+
+#anello-sottotitolo {
+  font-size: 0.9rem;
+  color: #78909c;
+}
+
+.streak-rientri {
+  margin-top: 12px;
+  text-align: center;
+  font-size: 0.9rem;
+  color: #546e7a;
+}
+
+#grafico-storico {
+  max-height: 220px;
 }
 
 .sync-indicator {

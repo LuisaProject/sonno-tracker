@@ -2,7 +2,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './src/config.js';
 import { startSession, endSession, getActiveSession, removeSession } from './src/queue.js';
 import { syncQueue } from './src/sync.js';
 import { loadQueue } from './src/queue.js';
-import { getSogliaMassimaOre, calcolaSforamentoOre, formattaOreMinuti } from './src/soglia.js';
+import { getSogliaMassimaOre, calcolaStatoAnello } from './src/soglia.js';
 import { buildDayView, buildWeekView, buildMonthView, buildYearView, sommaOreInRange } from './src/history.js';
 import { formattaRigaSessione } from './src/sessioni-recenti.js';
 
@@ -21,7 +21,10 @@ const el = {
   btnToggle: document.getElementById('btn-toggle-sessione'),
   timerLive: document.getElementById('timer-live'),
   syncIndicator: document.getElementById('sync-indicator'),
-  riquadroSoglia: document.getElementById('riquadro-soglia'),
+  anelloSoglia: document.getElementById('anello-soglia'),
+  anelloProgresso: document.getElementById('anello-progresso'),
+  anelloNumero: document.getElementById('anello-numero'),
+  anelloSottotitolo: document.getElementById('anello-sottotitolo'),
   periodoSelector: document.getElementById('periodo-selector'),
   graficoCanvas: document.getElementById('grafico-storico'),
   listaSessioniRecenti: document.getElementById('lista-sessioni-recenti'),
@@ -225,22 +228,24 @@ function disegnaGrafico(punti, soglia) {
   }
 }
 
+const RAGGIO_ANELLO = 108;
+const CIRCONFERENZA_ANELLO = 2 * Math.PI * RAGGIO_ANELLO;
+
 function aggiornaRiquadroSoglia(sessioni, soglia, now) {
   if (periodoAttivo !== 'giorno') {
-    el.riquadroSoglia.hidden = true;
+    el.anelloSoglia.hidden = true;
     return;
   }
   const rangeStart = new Date(now.getTime() - 24 * 3_600_000);
   const oreALetto = sommaOreInRange(sessioni, rangeStart, now);
-  const sforamento = calcolaSforamentoOre(oreALetto, soglia);
-  el.riquadroSoglia.hidden = false;
-  if (sforamento > 0) {
-    el.riquadroSoglia.classList.add('sforamento');
-    el.riquadroSoglia.textContent = `Hai superato di ${formattaOreMinuti(sforamento)}`;
-  } else {
-    el.riquadroSoglia.classList.remove('sforamento');
-    el.riquadroSoglia.textContent = `${formattaOreMinuti(oreALetto)} nelle ultime 24 ore`;
-  }
+  const stato = calcolaStatoAnello(oreALetto, soglia);
+
+  el.anelloSoglia.hidden = false;
+  const lunghezzaProgresso = CIRCONFERENZA_ANELLO * stato.percentuale;
+  el.anelloProgresso.setAttribute('stroke-dasharray', `${lunghezzaProgresso} ${CIRCONFERENZA_ANELLO}`);
+  el.anelloProgresso.setAttribute('stroke', stato.colore);
+  el.anelloNumero.textContent = stato.testo;
+  el.anelloSottotitolo.textContent = stato.sottotitolo;
 }
 
 async function renderSessioniRecenti() {
