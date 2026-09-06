@@ -12,7 +12,7 @@ export function isRientroDiurno(sessione, now, timeZone = 'Europe/Rome') {
   return entroFinestra && isOraDiurna(sessione.inizio, timeZone);
 }
 
-function dataLocale(iso, timeZone) {
+export function dataLocale(iso, timeZone) {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone,
     year: 'numeric',

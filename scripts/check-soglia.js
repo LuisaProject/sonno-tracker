@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { getSogliaMassimaOre, calcolaSforamentoOre, formattaOreMinuti } from '../src/soglia.js';
-import { sommaOreInRange, isRientroDiurno } from '../src/history.js';
+import { sommaOreInRange, isRientroDiurno, dataLocale } from '../src/history.js';
 
 export function isOrarioInvio(now, timeZone = 'Europe/Rome') {
   const parts = new Intl.DateTimeFormat('en-GB', {
@@ -58,17 +58,19 @@ export async function controllaRientriDiurni(supabaseClient, profile, now) {
   }
 }
 
-async function main() {
-  const now = new Date();
-  const supabaseClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+export function deveInviareAvvisoSoglia(profile, dataOggi) {
+  return profile.ultimo_avviso_soglia_data !== dataOggi;
+}
 
-  const { data: profile, error: profileError } = await supabaseClient.from('profiles').select('*').single();
-  if (profileError) throw profileError;
-
-  await controllaRientriDiurni(supabaseClient, profile, now);
-
+export async function controllaSogliaSerale(supabaseClient, profile, now) {
   if (!isOrarioInvio(now)) {
     console.log("Non è l'orario di invio, esco.");
+    return;
+  }
+
+  const dataOggi = dataLocale(now.toISOString(), 'Europe/Rome');
+  if (!deveInviareAvvisoSoglia(profile, dataOggi)) {
+    console.log('Avviso soglia già inviato oggi, salto.');
     return;
   }
 
@@ -90,7 +92,19 @@ async function main() {
 
   const messaggio = `Hai superato di ${formattaOreMinuti(sforamento)} il limite consigliato per la tua età (${soglia}h).\n${sceglifraseMotivazionale(profile.nome)}`;
   await inviaMessaggioTelegram(messaggio);
+  await supabaseClient.from('profiles').update({ ultimo_avviso_soglia_data: dataOggi }).eq('id', profile.id);
   console.log('Messaggio Telegram inviato.');
+}
+
+async function main() {
+  const now = new Date();
+  const supabaseClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+  const { data: profile, error: profileError } = await supabaseClient.from('profiles').select('*').single();
+  if (profileError) throw profileError;
+
+  await controllaRientriDiurni(supabaseClient, profile, now);
+  await controllaSogliaSerale(supabaseClient, profile, now);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

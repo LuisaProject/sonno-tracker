@@ -2,8 +2,11 @@ create table if not exists profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   nome text not null,
   eta int not null,
-  soglia_manuale_ore numeric
+  soglia_manuale_ore numeric,
+  ultimo_avviso_soglia_data date
 );
+
+alter table profiles add column if not exists ultimo_avviso_soglia_data date;
 
 alter table profiles enable row level security;
 
