@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isOrarioInvio, sceglifraseMotivazionale, deveInviareAvvisoSoglia, controllaSogliaSerale } from '../scripts/check-soglia.js';
+import { isOrarioInvio, sceglifraseMotivazionale, deveInviareAvvisoSoglia, controllaSogliaSerale, controllaRientriDiurni } from '../scripts/check-soglia.js';
 import { sommaOreInRange } from '../src/history.js';
 import { createFakeSupabaseClient } from './helpers/fake-supabase-client.js';
 
@@ -120,6 +120,42 @@ test('controllaSogliaSerale: invia il messaggio e aggiorna la data se sopra sogl
   const updateCall = client.calls.find((c) => c.tabella === 'profiles' && c.metodo === 'update');
   assert.ok(updateCall, 'doveva aggiornare la tabella profiles');
   assert.deepEqual(updateCall.args[0], { ultimo_avviso_soglia_data: '2026-01-15' });
+});
+
+test('controllaRientriDiurni: invia e marca la sessione come notificata se è un rientro diurno non ancora notificato', async (t) => {
+  const now = new Date('2026-01-15T09:05:00.000Z'); // 10:05 a Roma
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({ ok: true, status: 200 }));
+  const profile = { id: 'p1', nome: 'Mario' };
+  const sessioni = [
+    { id: 's1', inizio: '2026-01-15T09:00:00.000Z', fine: null, rientro_diurno_notificato: false },
+  ];
+  const client = createFakeSupabaseClient({ sessioni_sonno: { data: sessioni, error: null } });
+
+  await controllaRientriDiurni(client, profile, now);
+
+  assert.equal(fetchMock.mock.callCount(), 1);
+  const updateCall = client.calls.find((c) => c.tabella === 'sessioni_sonno' && c.metodo === 'update');
+  assert.ok(updateCall, 'doveva aggiornare la sessione');
+  assert.deepEqual(updateCall.args[0], { rientro_diurno_notificato: true });
+  const eqCall = client.calls.find((c) => c.metodo === 'eq');
+  assert.deepEqual(eqCall.args, ['id', 's1']);
+});
+
+test('controllaRientriDiurni: salta se la sessione è già stata notificata', async (t) => {
+  const now = new Date('2026-01-15T09:05:00.000Z'); // 10:05 a Roma
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => {
+    throw new Error('fetch non doveva essere chiamato');
+  });
+  const profile = { id: 'p1', nome: 'Mario' };
+  const sessioni = [
+    { id: 's1', inizio: '2026-01-15T09:00:00.000Z', fine: null, rientro_diurno_notificato: true },
+  ];
+  const client = createFakeSupabaseClient({ sessioni_sonno: { data: sessioni, error: null } });
+
+  await controllaRientriDiurni(client, profile, now);
+
+  assert.equal(fetchMock.mock.callCount(), 0);
+  assert.deepEqual(client.calls, []);
 });
 
 test('controllaSogliaSerale: non invia né aggiorna se sotto soglia', async (t) => {

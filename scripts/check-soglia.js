@@ -50,9 +50,11 @@ export async function controllaRientriDiurni(supabaseClient, profile, now) {
   if (error) throw error;
 
   for (const sessione of sessioniRecenti ?? []) {
+    if (sessione.rientro_diurno_notificato) continue;
     if (isRientroDiurno(sessione, now)) {
       const messaggio = `${profile.nome}, sei tornato a letto di giorno 🌤️\n${sceglifraseMotivazionale(profile.nome)}`;
       await inviaMessaggioTelegram(messaggio);
+      await supabaseClient.from('sessioni_sonno').update({ rientro_diurno_notificato: true }).eq('id', sessione.id);
       console.log('Messaggio rientro diurno inviato.');
     }
   }

@@ -23,8 +23,11 @@ create table if not exists sessioni_sonno (
   id uuid primary key,
   user_id uuid not null references auth.users(id) on delete cascade,
   inizio timestamptz not null,
-  fine timestamptz
+  fine timestamptz,
+  rientro_diurno_notificato boolean not null default false
 );
+
+alter table sessioni_sonno add column if not exists rientro_diurno_notificato boolean not null default false;
 
 alter table sessioni_sonno enable row level security;
 
