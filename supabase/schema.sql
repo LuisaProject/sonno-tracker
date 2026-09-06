@@ -7,6 +7,9 @@ create table if not exists profiles (
 );
 
 alter table profiles add column if not exists ultimo_avviso_soglia_data date;
+-- Nessuna policy aggiuntiva richiesta: scripts/check-soglia.js scrive con la
+-- service_role key, che bypassa sempre RLS. La policy profiles_update_own
+-- esistente resta sufficiente per l'app frontend (limita comunque per riga).
 
 alter table profiles enable row level security;
 
@@ -28,6 +31,8 @@ create table if not exists sessioni_sonno (
 );
 
 alter table sessioni_sonno add column if not exists rientro_diurno_notificato boolean not null default false;
+-- Stesso ragionamento di profiles: scrittura solo via service_role key,
+-- sessioni_update_own esistente resta sufficiente per l'app frontend.
 
 alter table sessioni_sonno enable row level security;
 
