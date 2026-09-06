@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isOrarioInvio, sceglifraseMotivazionale, deveInviareAvvisoSoglia, controllaSogliaSerale, controllaRientriDiurni } from '../scripts/check-soglia.js';
+import { isOrarioInvio, sceglifraseMotivazionale, deveInviareAvvisoSoglia, controllaSogliaSerale, controllaRientriDiurni, isOrarioPromemoria, devePromemoria21, controllaPromemoria21 } from '../scripts/check-soglia.js';
 import { sommaOreInRange } from '../src/history.js';
 import { createFakeSupabaseClient } from './helpers/fake-supabase-client.js';
 
@@ -167,6 +167,88 @@ test('controllaSogliaSerale: non invia né aggiorna se sotto soglia', async (t) 
   const client = createFakeSupabaseClient({ sessioni_sonno: { data: [], error: null } });
 
   await controllaSogliaSerale(client, profile, now);
+
+  assert.equal(fetchMock.mock.callCount(), 0);
+  assert.deepEqual(client.calls, []);
+});
+
+test('isOrarioPromemoria: vero alle 21:00 a Roma e fino alle 21:14', () => {
+  assert.equal(isOrarioPromemoria(new Date('2026-01-15T20:00:00.000Z')), true); // 21:00 CET
+  assert.equal(isOrarioPromemoria(new Date('2026-01-15T20:14:00.000Z')), true); // 21:14 CET
+});
+
+test('isOrarioPromemoria: falso dalle 21:15 in poi e in altri orari', () => {
+  assert.equal(isOrarioPromemoria(new Date('2026-01-15T20:15:00.000Z')), false); // 21:15 CET
+  assert.equal(isOrarioPromemoria(new Date('2026-01-15T12:00:00.000Z')), false);
+});
+
+test('devePromemoria21: falso se c\'è già una sessione aperta', () => {
+  const profile = { ultimo_promemoria_data: null };
+  assert.equal(devePromemoria21(profile, true, '2026-01-15'), false);
+});
+
+test('devePromemoria21: vero se nessuna sessione aperta e mai inviato prima', () => {
+  const profile = { ultimo_promemoria_data: null };
+  assert.equal(devePromemoria21(profile, false, '2026-01-15'), true);
+});
+
+test('devePromemoria21: falso se già inviato oggi', () => {
+  const profile = { ultimo_promemoria_data: '2026-01-15' };
+  assert.equal(devePromemoria21(profile, false, '2026-01-15'), false);
+});
+
+test('controllaPromemoria21: non fa nulla fuori dalla finestra 21:00-21:14 (no query, no invio)', async (t) => {
+  const now = new Date('2026-01-15T12:00:00.000Z');
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => {
+    throw new Error('fetch non doveva essere chiamato');
+  });
+  const profile = { id: 'p1', nome: 'Mario', ultimo_promemoria_data: null };
+  const client = createFakeSupabaseClient({});
+
+  await controllaPromemoria21(client, profile, now);
+
+  assert.equal(fetchMock.mock.callCount(), 0);
+  assert.deepEqual(client.calls, []);
+});
+
+test('controllaPromemoria21: non invia se esiste già una sessione aperta', async (t) => {
+  const now = new Date('2026-01-15T20:05:00.000Z'); // 21:05 a Roma
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => {
+    throw new Error('fetch non doveva essere chiamato');
+  });
+  const profile = { id: 'p1', nome: 'Mario', ultimo_promemoria_data: null };
+  const sessioniAperte = [{ id: 's1', inizio: '2026-01-15T19:00:00.000Z', fine: null }];
+  const client = createFakeSupabaseClient({ sessioni_sonno: { data: sessioniAperte, error: null } });
+
+  await controllaPromemoria21(client, profile, now);
+
+  assert.equal(fetchMock.mock.callCount(), 0);
+  assert.deepEqual(client.calls, []);
+});
+
+test('controllaPromemoria21: invia e aggiorna la data se nessuna sessione aperta e non ancora inviato oggi', async (t) => {
+  const now = new Date('2026-01-15T20:05:00.000Z'); // 21:05 a Roma
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({ ok: true, status: 200 }));
+  const profile = { id: 'p1', nome: 'Mario', ultimo_promemoria_data: null };
+  const client = createFakeSupabaseClient({ sessioni_sonno: { data: [], error: null } });
+
+  await controllaPromemoria21(client, profile, now);
+
+  assert.equal(fetchMock.mock.callCount(), 1);
+  const updateCall = client.calls.find((c) => c.tabella === 'profiles' && c.metodo === 'update');
+  assert.ok(updateCall, 'doveva aggiornare la tabella profiles');
+  assert.deepEqual(updateCall.args[0], { ultimo_promemoria_data: '2026-01-15' });
+});
+
+test('controllaPromemoria21: salta se già inviato oggi', async (t) => {
+  const now = new Date('2026-01-15T20:05:00.000Z'); // 21:05 a Roma
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => {
+    throw new Error('fetch non doveva essere chiamato');
+  });
+  const profile = { id: 'p1', nome: 'Mario', ultimo_promemoria_data: '2026-01-15' };
+  const client = createFakeSupabaseClient({ sessioni_sonno: { data: [], error: null } });
+
+  await controllaPromemoria21(client, profile, now);
 
   assert.equal(fetchMock.mock.callCount(), 0);
   assert.deepEqual(client.calls, []);

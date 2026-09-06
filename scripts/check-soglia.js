@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { getSogliaMassimaOre, calcolaSforamentoOre, formattaOreMinuti } from '../src/soglia.js';
 import { sommaOreInRange, isRientroDiurno, dataLocale } from '../src/history.js';
 
-export function isOrarioInvio(now, timeZone = 'Europe/Rome') {
+function isOrario(now, oraTarget, timeZone) {
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone,
     hour: '2-digit',
@@ -11,7 +11,15 @@ export function isOrarioInvio(now, timeZone = 'Europe/Rome') {
   }).formatToParts(now);
   const ora = parts.find((p) => p.type === 'hour').value;
   const minuti = parts.find((p) => p.type === 'minute').value;
-  return ora === '18' && Number(minuti) < 15;
+  return Number(ora) === oraTarget && Number(minuti) < 15;
+}
+
+export function isOrarioInvio(now, timeZone = 'Europe/Rome') {
+  return isOrario(now, 18, timeZone);
+}
+
+export function isOrarioPromemoria(now, timeZone = 'Europe/Rome') {
+  return isOrario(now, 21, timeZone);
 }
 
 const FRASI_MOTIVAZIONALI = [
@@ -98,6 +106,34 @@ export async function controllaSogliaSerale(supabaseClient, profile, now) {
   console.log('Messaggio Telegram inviato.');
 }
 
+export function devePromemoria21(profile, haSessioneAperta, dataOggi) {
+  if (haSessioneAperta) return false;
+  return profile.ultimo_promemoria_data !== dataOggi;
+}
+
+export async function controllaPromemoria21(supabaseClient, profile, now) {
+  if (!isOrarioPromemoria(now)) {
+    return;
+  }
+
+  const { data: sessioniAperte, error } = await supabaseClient
+    .from('sessioni_sonno')
+    .select('*')
+    .is('fine', null);
+  if (error) throw error;
+
+  const dataOggi = dataLocale(now.toISOString(), 'Europe/Rome');
+  const haSessioneAperta = (sessioniAperte ?? []).length > 0;
+  if (!devePromemoria21(profile, haSessioneAperta, dataOggi)) {
+    return;
+  }
+
+  const messaggio = 'Sei già a letto? 🌙 Se non l\'hai ancora fatto, apri l\'app e premi "Vado a letto".';
+  await inviaMessaggioTelegram(messaggio);
+  await supabaseClient.from('profiles').update({ ultimo_promemoria_data: dataOggi }).eq('id', profile.id);
+  console.log('Promemoria 21:00 inviato.');
+}
+
 async function main() {
   const now = new Date();
   const supabaseClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -107,6 +143,7 @@ async function main() {
 
   await controllaRientriDiurni(supabaseClient, profile, now);
   await controllaSogliaSerale(supabaseClient, profile, now);
+  await controllaPromemoria21(supabaseClient, profile, now);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
