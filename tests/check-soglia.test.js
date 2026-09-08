@@ -424,3 +424,153 @@ test('controllaRiepilogoSettimanale: senza settimana precedente niente frase di 
   assert.doesNotMatch(testo, /Rispetto alla settimana scorsa/);
   assert.doesNotMatch(testo, /record/);
 });
+
+// --- Riepilogo mensile -------------------------------------------------------
+
+import {
+  isUltimoGiornoDelMese,
+  isOrarioRiepilogoMensile,
+  scegliFraseScientifica,
+  deveInviareRiepilogoMensile,
+  controllaRiepilogoMensile,
+} from '../scripts/check-soglia.js';
+
+function giorniDelMese(annoMese, numeroGiorni) {
+  return Array.from({ length: numeroGiorni }, (_, i) => `${annoMese}-${String(i + 1).padStart(2, '0')}`);
+}
+
+// 30/09/2026 alle 20:35 a Roma (CEST, UTC+2): ultimo giorno del mese, dentro la finestra
+const FINE_MESE_SERA = new Date('2026-09-30T18:35:00.000Z');
+
+test('isUltimoGiornoDelMese: mese da 31 giorni (gennaio)', () => {
+  assert.equal(isUltimoGiornoDelMese(new Date('2026-01-31T12:00:00.000Z')), true);
+  assert.equal(isUltimoGiornoDelMese(new Date('2026-01-30T12:00:00.000Z')), false);
+});
+
+test('isUltimoGiornoDelMese: mese da 30 giorni (settembre)', () => {
+  assert.equal(isUltimoGiornoDelMese(new Date('2026-09-30T12:00:00.000Z')), true);
+  assert.equal(isUltimoGiornoDelMese(new Date('2026-09-29T12:00:00.000Z')), false);
+});
+
+test('isUltimoGiornoDelMese: febbraio non bisestile e bisestile', () => {
+  assert.equal(isUltimoGiornoDelMese(new Date('2026-02-28T12:00:00.000Z')), true); // 2026 non bisestile
+  assert.equal(isUltimoGiornoDelMese(new Date('2024-02-28T12:00:00.000Z')), false); // 2024 bisestile
+  assert.equal(isUltimoGiornoDelMese(new Date('2024-02-29T12:00:00.000Z')), true);
+});
+
+test('isUltimoGiornoDelMese: usa la data di Roma, non quella UTC', () => {
+  // 31/01/2026 23:30 UTC = 01/02/2026 00:30 a Roma: a Roma il mese è già cambiato
+  assert.equal(isUltimoGiornoDelMese(new Date('2026-01-31T23:30:00.000Z')), false);
+});
+
+test('isOrarioRiepilogoMensile: vero l\'ultimo giorno del mese fra le 20:30 e le 20:44', () => {
+  assert.equal(isOrarioRiepilogoMensile(new Date('2026-09-30T18:30:00.000Z')), true); // 20:30 CEST
+  assert.equal(isOrarioRiepilogoMensile(new Date('2026-09-30T18:44:00.000Z')), true); // 20:44 CEST
+});
+
+test('isOrarioRiepilogoMensile: falso fuori dalla finestra o in un giorno che non è l\'ultimo del mese', () => {
+  assert.equal(isOrarioRiepilogoMensile(new Date('2026-09-30T18:29:00.000Z')), false); // 20:29
+  assert.equal(isOrarioRiepilogoMensile(new Date('2026-09-30T18:45:00.000Z')), false); // 20:45
+  assert.equal(isOrarioRiepilogoMensile(new Date('2026-09-29T18:35:00.000Z')), false); // penultimo giorno
+});
+
+test('isOrarioRiepilogoMensile: non si sovrappone alla finestra del riepilogo settimanale (20:00-20:14)', () => {
+  assert.equal(isOrarioRiepilogoMensile(new Date('2026-09-30T18:05:00.000Z')), false);
+});
+
+test('scegliFraseScientifica: sceglie la frase in base a randomFn', () => {
+  const frasi = [
+    'Passare troppo tempo a letto durante il giorno può peggiorare la qualità del sonno notturno: il corpo fatica a distinguere quando è davvero ora di riposare.',
+    'Il movimento durante il giorno aiuta a regolare il ritmo sonno-veglia: più stai attivo, meglio dormi la notte.',
+    'Stare troppo a letto di giorno può aumentare stanchezza e rigidità, invece di ridurle.',
+    'Un ritmo regolare, con meno tempo a letto fuori orario, migliora l\'energia generale durante la giornata.',
+    'Il riposo eccessivo diurno è collegato a un peggior umore e a una minore qualità del sonno la notte successiva.',
+  ];
+  frasi.forEach((atteso, indice) => {
+    assert.equal(scegliFraseScientifica(() => indice / frasi.length), atteso);
+  });
+});
+
+test('deveInviareRiepilogoMensile: deduplica sulla data odierna', () => {
+  assert.equal(deveInviareRiepilogoMensile({ ultimo_riepilogo_mensile_data: null }, '2026-09-30'), true);
+  assert.equal(deveInviareRiepilogoMensile({ ultimo_riepilogo_mensile_data: '2026-08-31' }, '2026-09-30'), true);
+  assert.equal(deveInviareRiepilogoMensile({ ultimo_riepilogo_mensile_data: '2026-09-30' }, '2026-09-30'), false);
+});
+
+test('controllaRiepilogoMensile: non fa nulla fuori dalla finestra (no query, no invio)', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => {
+    throw new Error('fetch non doveva essere chiamato');
+  });
+  const profile = { id: 'p1', eta: 30, nome: 'Mario', ultimo_riepilogo_mensile_data: null };
+  const client = createFakeSupabaseClient({});
+
+  await controllaRiepilogoMensile(client, profile, new Date('2026-09-15T18:35:00.000Z'));
+
+  assert.equal(fetchMock.mock.callCount(), 0);
+  assert.deepEqual(client.calls, []);
+});
+
+test('controllaRiepilogoMensile: salta se già inviato oggi', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => {
+    throw new Error('fetch non doveva essere chiamato');
+  });
+  const profile = { id: 'p1', eta: 30, nome: 'Mario', ultimo_riepilogo_mensile_data: '2026-09-30' };
+  const client = createFakeSupabaseClient({ sessioni_sonno: { data: [], error: null } });
+
+  await controllaRiepilogoMensile(client, profile, FINE_MESE_SERA);
+
+  assert.equal(fetchMock.mock.callCount(), 0);
+  assert.deepEqual(client.calls, []);
+});
+
+test('controllaRiepilogoMensile: invia statistiche, frase scientifica e record, poi aggiorna la data', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({ ok: true, status: 200 }));
+  const profile = { id: 'p1', eta: 30, nome: 'Mario', ultimo_riepilogo_mensile_data: null }; // soglia 9h
+  const sessioni = [
+    ...giorniDelMese('2026-08', 31).map((g) => sessioneDelGiorno(g, 10)), // agosto: media 10h
+    ...giorniDelMese('2026-09', 30).map((g) => sessioneDelGiorno(g, 8)), // settembre: media 8h
+  ];
+  const client = createFakeSupabaseClient({ sessioni_sonno: { data: sessioni, error: null } });
+
+  await controllaRiepilogoMensile(client, profile, FINE_MESE_SERA, () => 0);
+
+  assert.equal(fetchMock.mock.callCount(), 1);
+  const testo = corpoMessaggio(fetchMock);
+  assert.match(testo, /Riepilogo di settembre \(01\/09 → 30\/09\)/);
+  assert.match(testo, /Media giornaliera: 8h 0m \(soglia 9h\)/);
+  assert.match(testo, /Giorni sopra soglia: 0 su 30/);
+  assert.match(testo, /💡 Passare troppo tempo a letto durante il giorno/);
+  assert.match(testo, /🏆 Nuovo record personale!/);
+
+  const updateCall = client.calls.find((c) => c.tabella === 'profiles' && c.metodo === 'update');
+  assert.deepEqual(updateCall.args[0], { ultimo_riepilogo_mensile_data: '2026-09-30' });
+});
+
+test('controllaRiepilogoMensile: nessun record se un mese passato è migliore', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({ ok: true, status: 200 }));
+  const profile = { id: 'p1', eta: 30, nome: 'Mario', ultimo_riepilogo_mensile_data: null };
+  const sessioni = [
+    ...giorniDelMese('2026-08', 31).map((g) => sessioneDelGiorno(g, 8)), // agosto: media 8h
+    ...giorniDelMese('2026-09', 30).map((g) => sessioneDelGiorno(g, 11)), // settembre: media 11h
+  ];
+  const client = createFakeSupabaseClient({ sessioni_sonno: { data: sessioni, error: null } });
+
+  await controllaRiepilogoMensile(client, profile, FINE_MESE_SERA, () => 0);
+
+  const testo = corpoMessaggio(fetchMock);
+  assert.doesNotMatch(testo, /record/);
+  assert.match(testo, /Giorni sopra soglia: 30 su 30/);
+});
+
+test('controllaRiepilogoMensile: senza storico non invia nulla', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => {
+    throw new Error('fetch non doveva essere chiamato');
+  });
+  const profile = { id: 'p1', eta: 30, nome: 'Mario', ultimo_riepilogo_mensile_data: null };
+  const client = createFakeSupabaseClient({ sessioni_sonno: { data: [], error: null } });
+
+  await controllaRiepilogoMensile(client, profile, FINE_MESE_SERA);
+
+  assert.equal(fetchMock.mock.callCount(), 0);
+  assert.equal(client.calls.find((c) => c.metodo === 'update'), undefined);
+});

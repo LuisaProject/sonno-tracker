@@ -5,12 +5,14 @@ create table if not exists profiles (
   soglia_manuale_ore numeric,
   ultimo_avviso_soglia_data date,
   ultimo_promemoria_data date,
-  ultimo_riepilogo_data date
+  ultimo_riepilogo_data date,
+  ultimo_riepilogo_mensile_data date
 );
 
 alter table profiles add column if not exists ultimo_avviso_soglia_data date;
 alter table profiles add column if not exists ultimo_promemoria_data date;
 alter table profiles add column if not exists ultimo_riepilogo_data date;
+alter table profiles add column if not exists ultimo_riepilogo_mensile_data date;
 -- Nessuna policy aggiuntiva richiesta: scripts/check-soglia.js scrive con la
 -- service_role key, che bypassa sempre RLS. La policy profiles_update_own
 -- esistente resta sufficiente per l'app frontend (limita comunque per riga).

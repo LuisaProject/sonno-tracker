@@ -5,6 +5,7 @@ import {
   isRientroDiurno,
   dataLocale,
   raggruppaPerSettimanaCalendario,
+  raggruppaPerMeseCalendario,
   calcolaRiepilogoSettimanale,
   trovaRecord,
   battePeriodo,
@@ -245,6 +246,93 @@ export async function controllaRiepilogoSettimanale(supabaseClient, profile, now
   console.log('Riepilogo settimanale inviato.');
 }
 
+// --- Riepilogo mensile -------------------------------------------------------
+
+export function isUltimoGiornoDelMese(now, timeZone = 'Europe/Rome') {
+  const [anno, mese, giorno] = dataLocale(now.toISOString(), timeZone).split('-').map(Number);
+  // Date.UTC gestisce lo sfondamento (giorno 32 -> mese successivo) e non risente
+  // dei cambi di ora legale, che invece falserebbero un now + 24h.
+  const domani = new Date(Date.UTC(anno, mese - 1, giorno + 1));
+  return domani.getUTCMonth() + 1 !== mese;
+}
+
+export function isOrarioRiepilogoMensile(now, timeZone = 'Europe/Rome') {
+  return isUltimoGiornoDelMese(now, timeZone) && isOrario(now, 20, timeZone, 30);
+}
+
+const FRASI_SCIENTIFICHE = [
+  'Passare troppo tempo a letto durante il giorno può peggiorare la qualità del sonno notturno: il corpo fatica a distinguere quando è davvero ora di riposare.',
+  'Il movimento durante il giorno aiuta a regolare il ritmo sonno-veglia: più stai attivo, meglio dormi la notte.',
+  'Stare troppo a letto di giorno può aumentare stanchezza e rigidità, invece di ridurle.',
+  'Un ritmo regolare, con meno tempo a letto fuori orario, migliora l\'energia generale durante la giornata.',
+  'Il riposo eccessivo diurno è collegato a un peggior umore e a una minore qualità del sonno la notte successiva.',
+];
+
+export function scegliFraseScientifica(randomFn = Math.random) {
+  const indice = Math.floor(randomFn() * FRASI_SCIENTIFICHE.length);
+  return FRASI_SCIENTIFICHE[indice];
+}
+
+export function deveInviareRiepilogoMensile(profile, dataOggi) {
+  return profile.ultimo_riepilogo_mensile_data !== dataOggi;
+}
+
+function nomeMese(dataISO) {
+  const [anno, mese] = dataISO.split('-').map(Number);
+  return new Intl.DateTimeFormat('it-IT', { timeZone: 'UTC', month: 'long' }).format(new Date(Date.UTC(anno, mese - 1, 1)));
+}
+
+export function costruisciMessaggioRiepilogoMensile({ mese, riepilogo, soglia, fraseScientifica, nuovoRecord }) {
+  const righe = [
+    `📅 Riepilogo di ${nomeMese(mese.inizioMese)} (${giornoMese(mese.inizioMese)} → ${giornoMese(mese.fineMese)})`,
+    '',
+    `Media giornaliera: ${formattaOreMinuti(riepilogo.media)} (soglia ${soglia}h)`,
+    `Giorno migliore: ${giornoMese(riepilogo.giornoMigliore.label)} — ${formattaOreMinuti(riepilogo.giornoMigliore.ore)}`,
+    `Giorno peggiore: ${giornoMese(riepilogo.giornoPeggiore.label)} — ${formattaOreMinuti(riepilogo.giornoPeggiore.ore)}`,
+    `Giorni sopra soglia: ${riepilogo.giorniSopraSoglia} su ${mese.giorni.length}`,
+  ];
+  if (fraseScientifica) righe.push('', `💡 ${fraseScientifica}`);
+  if (nuovoRecord) righe.push('', '🏆 Nuovo record personale!');
+  return righe.join('\n');
+}
+
+export async function controllaRiepilogoMensile(supabaseClient, profile, now, randomFn = Math.random) {
+  if (!isOrarioRiepilogoMensile(now)) {
+    return;
+  }
+
+  const dataOggi = dataLocale(now.toISOString(), 'Europe/Rome');
+  if (!deveInviareRiepilogoMensile(profile, dataOggi)) {
+    console.log('Riepilogo mensile già inviato oggi, salto.');
+    return;
+  }
+
+  const { data: sessioni, error } = await supabaseClient.from('sessioni_sonno').select('*');
+  if (error) throw error;
+
+  const mesi = raggruppaPerMeseCalendario(sessioni ?? [], now);
+  if (mesi.length === 0) {
+    console.log('Nessuno storico, riepilogo mensile non inviato.');
+    return;
+  }
+
+  const soglia = profile.soglia_manuale_ore ?? getSogliaMassimaOre(profile.eta);
+  const meseCorrente = mesi[mesi.length - 1];
+  const recordPrecedente = trovaRecord(mesi, soglia);
+
+  const messaggio = costruisciMessaggioRiepilogoMensile({
+    mese: meseCorrente,
+    riepilogo: calcolaRiepilogoSettimanale(meseCorrente.giorni, soglia),
+    soglia,
+    fraseScientifica: scegliFraseScientifica(randomFn),
+    nuovoRecord: recordPrecedente !== null && battePeriodo(meseCorrente, recordPrecedente, soglia),
+  });
+
+  await inviaMessaggioTelegram(messaggio);
+  await supabaseClient.from('profiles').update({ ultimo_riepilogo_mensile_data: dataOggi }).eq('id', profile.id);
+  console.log('Riepilogo mensile inviato.');
+}
+
 async function main() {
   const now = new Date();
   const supabaseClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -256,6 +344,7 @@ async function main() {
   await controllaSogliaSerale(supabaseClient, profile, now);
   await controllaPromemoria21(supabaseClient, profile, now);
   await controllaRiepilogoSettimanale(supabaseClient, profile, now);
+  await controllaRiepilogoMensile(supabaseClient, profile, now);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
