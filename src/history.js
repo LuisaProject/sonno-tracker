@@ -284,3 +284,12 @@ export function calcolaRiepilogoSettimanale(giorni, soglia) {
     giorniSopraSoglia: elenco.filter((g) => g.ore > soglia).length,
   };
 }
+
+// '2026-09-07', '2026-09-13' -> '07/09/2026 → 13/09/2026'
+export function formattaIntervalloDate(inizioISO, fineISO) {
+  const perEsteso = (dataISO) => {
+    const [anno, mese, giorno] = dataISO.split('-');
+    return `${giorno}/${mese}/${anno}`;
+  };
+  return `${perEsteso(inizioISO)} → ${perEsteso(fineISO)}`;
+}

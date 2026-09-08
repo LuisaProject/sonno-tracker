@@ -242,3 +242,10 @@ test('calcolaRiepilogoSettimanale: elenco vuoto non esplode', () => {
   const riepilogo = calcolaRiepilogoSettimanale([], 9);
   assert.deepEqual(riepilogo, { media: 0, giornoMigliore: null, giornoPeggiore: null, giorniSopraSoglia: 0 });
 });
+
+import { formattaIntervalloDate } from '../src/history.js';
+
+test('formattaIntervalloDate: mostra le due date in formato italiano', () => {
+  assert.equal(formattaIntervalloDate('2026-09-07', '2026-09-13'), '07/09/2026 → 13/09/2026');
+  assert.equal(formattaIntervalloDate('2026-02-01', '2026-02-28'), '01/02/2026 → 28/02/2026');
+});

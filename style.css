@@ -154,3 +154,41 @@ input, button {
   padding: 6px 10px;
   font-size: 0.8rem;
 }
+
+#record {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.record-box {
+  flex: 1;
+  padding: 12px;
+  border-radius: 8px;
+  background: #eceff1;
+  text-align: center;
+}
+
+.record-box h3 {
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #37474f;
+}
+
+.record-valore {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #546e7a;
+}
+
+.record-media {
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+  font-weight: bold;
+  color: #37474f;
+}
+
+.record-media:empty {
+  display: none;
+}

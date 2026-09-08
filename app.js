@@ -2,8 +2,19 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './src/config.js';
 import { startSession, endSession, getActiveSession, removeSession } from './src/queue.js';
 import { syncQueue } from './src/sync.js';
 import { loadQueue } from './src/queue.js';
-import { getSogliaMassimaOre, calcolaStatoAnello } from './src/soglia.js';
-import { buildDayView, buildWeekView, buildMonthView, buildYearView, sommaOreInRange, contaGiorniSenzaRientri } from './src/history.js';
+import { getSogliaMassimaOre, calcolaStatoAnello, formattaOreMinuti } from './src/soglia.js';
+import {
+  buildDayView,
+  buildWeekView,
+  buildMonthView,
+  buildYearView,
+  sommaOreInRange,
+  contaGiorniSenzaRientri,
+  raggruppaPerSettimanaCalendario,
+  raggruppaPerMeseCalendario,
+  trovaRecord,
+  formattaIntervalloDate,
+} from './src/history.js';
 import { formattaRigaSessione } from './src/sessioni-recenti.js';
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -29,6 +40,10 @@ const el = {
   graficoCanvas: document.getElementById('grafico-storico'),
   listaSessioniRecenti: document.getElementById('lista-sessioni-recenti'),
   streakRientri: document.getElementById('streak-rientri'),
+  recordSettimana: document.getElementById('record-settimana'),
+  recordSettimanaMedia: document.getElementById('record-settimana-media'),
+  recordMese: document.getElementById('record-mese'),
+  recordMeseMedia: document.getElementById('record-mese-media'),
 };
 
 function mostraSchermata(nome) {
@@ -144,6 +159,57 @@ function onToggleSessione() {
 
 el.btnToggle.addEventListener('click', onToggleSessione);
 
+// Storico completo, non filtrato: serve ai record settimana/mese, che devono
+// guardare tutta la cronologia. Si ricarica solo quando i dati cambiano
+// davvero (accesso alla schermata, sync, chiusura o eliminazione di una
+// sessione), non a ogni cambio di scheda Giorno/Settimana/Mese/Anno.
+let sessioniComplete = [];
+
+async function caricaStoricoCompleto() {
+  if (!currentProfile) return;
+  const { data, error } = await supabaseClient
+    .from('sessioni_sonno')
+    .select('*')
+    .order('inizio', { ascending: true });
+  if (error) {
+    console.error(error);
+    return;
+  }
+  sessioniComplete = data ?? [];
+  renderRecord();
+}
+
+function mostraRecord(periodo, elValore, elMedia, testoVuoto) {
+  if (!periodo) {
+    elValore.textContent = testoVuoto;
+    elMedia.textContent = '';
+    return;
+  }
+  const [inizio, fine] = periodo.inizioSettimana
+    ? [periodo.inizioSettimana, periodo.fineSettimana]
+    : [periodo.inizioMese, periodo.fineMese];
+  elValore.textContent = formattaIntervalloDate(inizio, fine);
+  elMedia.textContent = `media ${formattaOreMinuti(periodo.media)} al giorno`;
+}
+
+function renderRecord() {
+  if (!currentProfile) return;
+  const soglia = currentProfile.soglia_manuale_ore ?? getSogliaMassimaOre(currentProfile.eta);
+  const now = new Date();
+  mostraRecord(
+    trovaRecord(raggruppaPerSettimanaCalendario(sessioniComplete, now), soglia),
+    el.recordSettimana,
+    el.recordSettimanaMedia,
+    'Ancora nessuna settimana completa registrata'
+  );
+  mostraRecord(
+    trovaRecord(raggruppaPerMeseCalendario(sessioniComplete, now), soglia),
+    el.recordMese,
+    el.recordMeseMedia,
+    'Ancora nessun mese completo registrato'
+  );
+}
+
 async function sincronizza() {
   if (loadQueue(storage).length > 0) {
     el.syncIndicator.hidden = false;
@@ -153,6 +219,7 @@ async function sincronizza() {
     if (error) throw error;
   });
   el.syncIndicator.hidden = loadQueue(storage).length === 0;
+  await caricaStoricoCompleto();
   await renderStorico();
   await renderSessioniRecenti();
 }
@@ -309,6 +376,7 @@ async function chiudiSessioneOra(id) {
     return;
   }
   sincronizzaCodaLocale(id, fineISO);
+  await caricaStoricoCompleto();
   await renderSessioniRecenti();
   await renderStorico();
 }
@@ -321,6 +389,7 @@ async function eliminaSessione(id) {
     return;
   }
   sincronizzaCodaLocale(id, null);
+  await caricaStoricoCompleto();
   await renderSessioniRecenti();
   await renderStorico();
 }
