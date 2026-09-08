@@ -249,3 +249,48 @@ test('formattaIntervalloDate: mostra le due date in formato italiano', () => {
   assert.equal(formattaIntervalloDate('2026-09-07', '2026-09-13'), '07/09/2026 → 13/09/2026');
   assert.equal(formattaIntervalloDate('2026-02-01', '2026-02-28'), '01/02/2026 → 28/02/2026');
 });
+
+import { calcolaRangeFetch } from '../src/history.js';
+
+test('calcolaRangeFetch: la vista Giorno chiede le ultime 24 ore', () => {
+  const now = new Date('2026-09-09T15:30:00.000Z');
+  const { inizio, fine } = calcolaRangeFetch('giorno', now);
+  assert.equal(fine, now);
+  assert.equal(now.getTime() - inizio.getTime(), 24 * 3_600_000);
+});
+
+test('calcolaRangeFetch: ogni vista copre almeno l\'intervallo che il grafico disegna', () => {
+  const now = new Date('2026-09-09T15:30:00.000Z');
+  const viste = {
+    giorno: buildDayView,
+    settimana: buildWeekView,
+    mese: buildMonthView,
+    anno: buildYearView,
+  };
+  for (const [periodo, costruisci] of Object.entries(viste)) {
+    const { inizio } = calcolaRangeFetch(periodo, now);
+    // Una sessione che finisce appena dopo l'inizio dell'intervallo deve
+    // comparire nel grafico: se così non fosse, il fetch scarterebbe dati usati.
+    const sessione = [{ id: 's1', inizio: new Date(inizio.getTime() + 60_000).toISOString(), fine: new Date(inizio.getTime() + 3_660_000).toISOString() }];
+    const totale = costruisci(sessione, now).reduce((tot, p) => tot + p.ore, 0);
+    assert.ok(totale > 0, `la vista ${periodo} non vede una sessione all'inizio del proprio intervallo`);
+  }
+});
+
+test('calcolaRangeFetch: la vista Settimana parte dalla mezzanotte di 6 giorni fa', () => {
+  const now = new Date('2026-09-09T15:30:00.000Z');
+  const { inizio } = calcolaRangeFetch('settimana', now);
+  const atteso = new Date(now.getTime() - 6 * 86_400_000);
+  atteso.setHours(0, 0, 0, 0);
+  assert.equal(inizio.getTime(), atteso.getTime());
+});
+
+test('calcolaRangeFetch: la vista Anno parte dal primo giorno di 11 mesi fa', () => {
+  const now = new Date('2026-09-09T15:30:00.000Z');
+  const { inizio } = calcolaRangeFetch('anno', now);
+  assert.equal(inizio.getTime(), new Date(now.getFullYear(), now.getMonth() - 11, 1).getTime());
+});
+
+test('calcolaRangeFetch: periodo sconosciuto -> errore esplicito', () => {
+  assert.throws(() => calcolaRangeFetch('decennio', new Date()), /Periodo sconosciuto/);
+});

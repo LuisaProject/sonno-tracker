@@ -14,6 +14,7 @@ import {
   raggruppaPerMeseCalendario,
   trovaRecord,
   formattaIntervalloDate,
+  calcolaRangeFetch,
 } from './src/history.js';
 import { formattaRigaSessione } from './src/sessioni-recenti.js';
 
@@ -177,6 +178,9 @@ async function caricaStoricoCompleto() {
   }
   sessioniComplete = data ?? [];
   renderRecord();
+  // Lo streak guarda indietro fino a un anno: va calcolato sullo storico
+  // completo, non sulla finestra ridotta che scarica renderStorico.
+  aggiornaStreakRientri(sessioniComplete, new Date());
 }
 
 function mostraRecord(periodo, elValore, elMedia, testoVuoto) {
@@ -244,19 +248,22 @@ el.periodoSelector.addEventListener('click', (ev) => {
 
 async function renderStorico() {
   if (!currentProfile) return;
+  const now = new Date();
+  const { inizio } = calcolaRangeFetch(periodoAttivo, now);
+  // Solo le sessioni che toccano l'intervallo della scheda attiva: quelle
+  // ancora aperte (fine null) servono sempre, perché arrivano fino ad adesso.
   const { data: sessioni } = await supabaseClient
     .from('sessioni_sonno')
     .select('*')
+    .or(`fine.is.null,fine.gte.${inizio.toISOString()}`)
     .order('inizio', { ascending: true });
 
   const soglia = currentProfile.soglia_manuale_ore ?? getSogliaMassimaOre(currentProfile.eta);
-  const now = new Date();
   const costruisciPunti = { giorno: buildDayView, settimana: buildWeekView, mese: buildMonthView, anno: buildYearView }[periodoAttivo];
   const punti = costruisciPunti(sessioni ?? [], now);
 
   disegnaGrafico(punti, soglia);
   aggiornaRiquadroSoglia(sessioni ?? [], soglia, now);
-  aggiornaStreakRientri(sessioni ?? [], now);
 }
 
 function aggiornaStreakRientri(sessioni, now) {

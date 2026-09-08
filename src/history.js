@@ -293,3 +293,18 @@ export function formattaIntervalloDate(inizioISO, fineISO) {
   };
   return `${perEsteso(inizioISO)} → ${perEsteso(fineISO)}`;
 }
+
+// Intervallo minimo di storico che serve alla scheda attiva del grafico, così
+// la query non scarica ogni volta tutta la cronologia. Gli estremi combaciano
+// con quelli usati da buildDayView/buildWeekView/buildMonthView/buildYearView.
+export function calcolaRangeFetch(periodo, now = new Date()) {
+  const inizi = {
+    giorno: () => new Date(now.getTime() - 24 * 3_600_000),
+    settimana: () => inizioGiorno(new Date(now.getTime() - 6 * 86_400_000)),
+    mese: () => inizioGiorno(new Date(now.getTime() - 29 * 86_400_000)),
+    anno: () => new Date(now.getFullYear(), now.getMonth() - 11, 1),
+  };
+  const calcolaInizio = inizi[periodo];
+  if (!calcolaInizio) throw new Error(`Periodo sconosciuto: ${periodo}`);
+  return { inizio: calcolaInizio(), fine: now };
+}
