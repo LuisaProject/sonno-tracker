@@ -308,3 +308,22 @@ export function calcolaRangeFetch(periodo, now = new Date()) {
   if (!calcolaInizio) throw new Error(`Periodo sconosciuto: ${periodo}`);
   return { inizio: calcolaInizio(), fine: now };
 }
+
+// Verifica se il nuovo intervallo si sovrappone a una sessione esistente.
+// Una sessione esistente ancora aperta (fine null) è considerata "in corso
+// fino ad ora", quindi si estende fino a `now`. Intervalli adiacenti che si
+// toccano solo agli estremi (fine === inizio dell'altro) non sono in conflitto.
+// Restituisce la prima sessione in conflitto trovata, o null se nessuna.
+export function sessioneSovrapposta(nuovaSessione, sessioniEsistenti, now = new Date()) {
+  const nuovoInizio = new Date(nuovaSessione.inizio).getTime();
+  const nuovaFine = new Date(nuovaSessione.fine).getTime();
+
+  for (const esistente of sessioniEsistenti ?? []) {
+    const inizioEsistente = new Date(esistente.inizio).getTime();
+    const fineEsistente = esistente.fine ? new Date(esistente.fine).getTime() : now.getTime();
+    if (nuovoInizio < fineEsistente && inizioEsistente < nuovaFine) {
+      return esistente;
+    }
+  }
+  return null;
+}

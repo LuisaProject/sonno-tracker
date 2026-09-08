@@ -294,3 +294,51 @@ test('calcolaRangeFetch: la vista Anno parte dal primo giorno di 11 mesi fa', ()
 test('calcolaRangeFetch: periodo sconosciuto -> errore esplicito', () => {
   assert.throws(() => calcolaRangeFetch('decennio', new Date()), /Periodo sconosciuto/);
 });
+
+import { sessioneSovrapposta } from '../src/history.js';
+
+test('sessioneSovrapposta: sovrapposizione piena -> restituisce la sessione in conflitto', () => {
+  const esistenti = [{ id: 's1', inizio: '2026-09-08T22:00:00.000Z', fine: '2026-09-09T06:00:00.000Z' }];
+  const nuova = { inizio: '2026-09-08T23:00:00.000Z', fine: '2026-09-09T05:00:00.000Z' }; // interamente dentro
+  const conflitto = sessioneSovrapposta(nuova, esistenti);
+  assert.equal(conflitto?.id, 's1');
+});
+
+test('sessioneSovrapposta: sovrapposizione parziale -> conflitto', () => {
+  const esistenti = [{ id: 's1', inizio: '2026-09-08T22:00:00.000Z', fine: '2026-09-09T06:00:00.000Z' }];
+  const nuova = { inizio: '2026-09-09T05:00:00.000Z', fine: '2026-09-09T09:00:00.000Z' }; // sconfina dopo
+  assert.equal(sessioneSovrapposta(nuova, esistenti)?.id, 's1');
+});
+
+test('sessioneSovrapposta: intervalli adiacenti che si toccano ma non si sovrappongono -> nessun conflitto', () => {
+  const esistenti = [{ id: 's1', inizio: '2026-09-08T22:00:00.000Z', fine: '2026-09-09T06:00:00.000Z' }];
+  const primaAdiacente = { inizio: '2026-09-08T14:00:00.000Z', fine: '2026-09-08T22:00:00.000Z' }; // finisce quando inizia s1
+  const dopoAdiacente = { inizio: '2026-09-09T06:00:00.000Z', fine: '2026-09-09T10:00:00.000Z' }; // inizia quando finisce s1
+  assert.equal(sessioneSovrapposta(primaAdiacente, esistenti), null);
+  assert.equal(sessioneSovrapposta(dopoAdiacente, esistenti), null);
+});
+
+test('sessioneSovrapposta: sessione esistente ancora aperta (fine null) che si sovrappone -> conflitto', () => {
+  const now = new Date('2026-09-09T12:00:00.000Z');
+  const esistenti = [{ id: 's1', inizio: '2026-09-09T08:00:00.000Z', fine: null }]; // aperta dalle 08:00, quindi "fino ad ora"
+  const nuova = { inizio: '2026-09-09T10:00:00.000Z', fine: '2026-09-09T11:00:00.000Z' }; // dentro la finestra aperta
+  assert.equal(sessioneSovrapposta(nuova, esistenti, now)?.id, 's1');
+});
+
+test('sessioneSovrapposta: sessione esistente aperta ma il nuovo intervallo è dopo now -> nessun conflitto', () => {
+  const now = new Date('2026-09-09T12:00:00.000Z');
+  const esistenti = [{ id: 's1', inizio: '2026-09-09T08:00:00.000Z', fine: null }];
+  const nuova = { inizio: '2026-09-09T13:00:00.000Z', fine: '2026-09-09T14:00:00.000Z' }; // dopo now, la sessione aperta non arriva fin lì
+  assert.equal(sessioneSovrapposta(nuova, esistenti, now), null);
+});
+
+test('sessioneSovrapposta: nessuna sovrapposizione tra intervalli distanti', () => {
+  const esistenti = [{ id: 's1', inizio: '2026-09-08T22:00:00.000Z', fine: '2026-09-09T06:00:00.000Z' }];
+  const nuova = { inizio: '2026-09-10T22:00:00.000Z', fine: '2026-09-11T06:00:00.000Z' };
+  assert.equal(sessioneSovrapposta(nuova, esistenti), null);
+});
+
+test('sessioneSovrapposta: elenco vuoto -> nessun conflitto', () => {
+  const nuova = { inizio: '2026-09-08T22:00:00.000Z', fine: '2026-09-09T06:00:00.000Z' };
+  assert.equal(sessioneSovrapposta(nuova, []), null);
+});

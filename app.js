@@ -15,6 +15,7 @@ import {
   trovaRecord,
   formattaIntervalloDate,
   calcolaRangeFetch,
+  sessioneSovrapposta,
 } from './src/history.js';
 import { formattaRigaSessione } from './src/sessioni-recenti.js';
 
@@ -45,6 +46,9 @@ const el = {
   recordSettimanaMedia: document.getElementById('record-settimana-media'),
   recordMese: document.getElementById('record-mese'),
   recordMeseMedia: document.getElementById('record-mese-media'),
+  formSessioneManuale: document.getElementById('form-sessione-manuale'),
+  manualeInizio: document.getElementById('manuale-inizio'),
+  manualeFine: document.getElementById('manuale-fine'),
 };
 
 function mostraSchermata(nome) {
@@ -396,6 +400,49 @@ async function eliminaSessione(id) {
     return;
   }
   sincronizzaCodaLocale(id, null);
+  await caricaStoricoCompleto();
+  await renderSessioniRecenti();
+  await renderStorico();
+}
+
+el.formSessioneManuale.addEventListener('submit', onAggiungiSessioneManuale);
+
+async function onAggiungiSessioneManuale(ev) {
+  ev.preventDefault();
+  const inizioValore = el.manualeInizio.value;
+  const fineValore = el.manualeFine.value;
+  if (!inizioValore || !fineValore) {
+    alert('Inserisci sia l\'inizio che la fine della sessione.');
+    return;
+  }
+
+  const inizioISO = new Date(inizioValore).toISOString();
+  const fineISO = new Date(fineValore).toISOString();
+  if (new Date(fineISO) <= new Date(inizioISO)) {
+    alert('La fine deve essere dopo l\'inizio.');
+    return;
+  }
+
+  const conflitto = sessioneSovrapposta({ inizio: inizioISO, fine: fineISO }, sessioniComplete);
+  if (conflitto) {
+    const inizioConflitto = new Date(conflitto.inizio).toLocaleString('it-IT');
+    const fineConflitto = conflitto.fine ? new Date(conflitto.fine).toLocaleString('it-IT') : 'in corso';
+    alert(`Questo intervallo si sovrappone a una sessione già registrata (${inizioConflitto} → ${fineConflitto}).`);
+    return;
+  }
+
+  const { error } = await supabaseClient.from('sessioni_sonno').insert({
+    id: crypto.randomUUID(),
+    user_id: currentUser.id,
+    inizio: inizioISO,
+    fine: fineISO,
+  });
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  el.formSessioneManuale.reset();
   await caricaStoricoCompleto();
   await renderSessioniRecenti();
   await renderStorico();

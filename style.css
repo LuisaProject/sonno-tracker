@@ -192,3 +192,22 @@ input, button {
 .record-media:empty {
   display: none;
 }
+
+#aggiungi-sessione {
+  margin-top: 24px;
+}
+
+#aggiungi-sessione h2 {
+  font-size: 1rem;
+  color: #37474f;
+}
+
+#form-sessione-manuale {
+  gap: 8px;
+}
+
+#form-sessione-manuale label {
+  font-size: 0.8rem;
+  color: #546e7a;
+  margin-bottom: -4px;
+}
