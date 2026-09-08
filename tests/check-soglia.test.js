@@ -253,3 +253,174 @@ test('controllaPromemoria21: salta se già inviato oggi', async (t) => {
   assert.equal(fetchMock.mock.callCount(), 0);
   assert.deepEqual(client.calls, []);
 });
+
+// --- Riepilogo settimanale ---------------------------------------------------
+
+import {
+  isOrarioRiepilogoSettimanale,
+  deveInviareRiepilogoSettimanale,
+  costruisciFraseConfronto,
+  controllaRiepilogoSettimanale,
+} from '../scripts/check-soglia.js';
+
+// Sessione che resta interamente dentro il giorno locale indicato (Roma).
+function sessioneDelGiorno(dataISO, ore) {
+  const inizio = new Date(`${dataISO}T02:00:00.000Z`);
+  return {
+    id: `${dataISO}`,
+    inizio: inizio.toISOString(),
+    fine: new Date(inizio.getTime() + ore * 3_600_000).toISOString(),
+  };
+}
+
+function settimanaDi(giorni, ore) {
+  return giorni.map((g) => sessioneDelGiorno(g, ore));
+}
+
+const SETTIMANA_PRECEDENTE = ['2026-08-31', '2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04', '2026-09-05', '2026-09-06'];
+const SETTIMANA_CORRENTE = ['2026-09-07', '2026-09-08', '2026-09-09', '2026-09-10', '2026-09-11', '2026-09-12', '2026-09-13'];
+const DOMENICA_SERA = new Date('2026-09-13T18:05:00.000Z'); // domenica 13/09/2026, 20:05 a Roma
+
+function corpoMessaggio(fetchMock) {
+  return JSON.parse(fetchMock.mock.calls[0].arguments[1].body).text;
+}
+
+test('isOrarioRiepilogoSettimanale: vero la domenica dalle 20:00 alle 20:14 a Roma', () => {
+  assert.equal(isOrarioRiepilogoSettimanale(new Date('2026-09-13T18:00:00.000Z')), true); // 20:00 CEST
+  assert.equal(isOrarioRiepilogoSettimanale(new Date('2026-09-13T18:14:00.000Z')), true); // 20:14 CEST
+});
+
+test('isOrarioRiepilogoSettimanale: falso dalle 20:15, in altri orari e negli altri giorni', () => {
+  assert.equal(isOrarioRiepilogoSettimanale(new Date('2026-09-13T18:15:00.000Z')), false); // domenica 20:15
+  assert.equal(isOrarioRiepilogoSettimanale(new Date('2026-09-13T12:00:00.000Z')), false); // domenica 14:00
+  assert.equal(isOrarioRiepilogoSettimanale(new Date('2026-09-12T18:05:00.000Z')), false); // sabato 20:05
+});
+
+test('deveInviareRiepilogoSettimanale: vero se mai inviato o inviato in un altro giorno, falso se già oggi', () => {
+  assert.equal(deveInviareRiepilogoSettimanale({ ultimo_riepilogo_data: null }, '2026-09-13'), true);
+  assert.equal(deveInviareRiepilogoSettimanale({ ultimo_riepilogo_data: '2026-09-06' }, '2026-09-13'), true);
+  assert.equal(deveInviareRiepilogoSettimanale({ ultimo_riepilogo_data: '2026-09-13' }, '2026-09-13'), false);
+});
+
+test('costruisciFraseConfronto: sotto i 15 minuti di differenza è stabile', () => {
+  const frase = costruisciFraseConfronto(8, 8 + 10 / 60); // 10 minuti in meno
+  assert.match(frase, /stabile/);
+  assert.match(frase, /10 minuti/);
+  assert.doesNotMatch(frase, /meglio|peggio/);
+});
+
+test('costruisciFraseConfronto: fra 15 minuti e 1 ora in meno -> leggermente meglio, col valore reale', () => {
+  const frase = costruisciFraseConfronto(8, 8 + 40 / 60); // 40 minuti in meno
+  assert.match(frase, /leggermente meglio/);
+  assert.match(frase, /40 minuti in meno/);
+});
+
+test('costruisciFraseConfronto: fra 15 minuti e 1 ora in più -> leggermente peggio', () => {
+  const frase = costruisciFraseConfronto(8 + 30 / 60, 8);
+  assert.match(frase, /leggermente peggio/);
+  assert.match(frase, /30 minuti in più/);
+});
+
+test('costruisciFraseConfronto: oltre 1 ora -> molto meglio / molto peggio', () => {
+  assert.match(costruisciFraseConfronto(8, 10), /molto meglio.*2h 0m in meno/);
+  assert.match(costruisciFraseConfronto(10, 8), /molto peggio.*2h 0m in più/);
+});
+
+test('costruisciFraseConfronto: esattamente 1 ora resta nella fascia "leggermente"', () => {
+  assert.match(costruisciFraseConfronto(8, 9), /leggermente meglio/);
+});
+
+test('controllaRiepilogoSettimanale: non fa nulla fuori dalla finestra (no query, no invio)', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => {
+    throw new Error('fetch non doveva essere chiamato');
+  });
+  const profile = { id: 'p1', eta: 30, nome: 'Mario', ultimo_riepilogo_data: null };
+  const client = createFakeSupabaseClient({});
+
+  await controllaRiepilogoSettimanale(client, profile, new Date('2026-09-13T12:00:00.000Z'));
+
+  assert.equal(fetchMock.mock.callCount(), 0);
+  assert.deepEqual(client.calls, []);
+});
+
+test('controllaRiepilogoSettimanale: salta se già inviato oggi', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => {
+    throw new Error('fetch non doveva essere chiamato');
+  });
+  const profile = { id: 'p1', eta: 30, nome: 'Mario', ultimo_riepilogo_data: '2026-09-13' };
+  const client = createFakeSupabaseClient({ sessioni_sonno: { data: [], error: null } });
+
+  await controllaRiepilogoSettimanale(client, profile, DOMENICA_SERA);
+
+  assert.equal(fetchMock.mock.callCount(), 0);
+  assert.deepEqual(client.calls, []);
+});
+
+test('controllaRiepilogoSettimanale: senza storico non invia nulla', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => {
+    throw new Error('fetch non doveva essere chiamato');
+  });
+  const profile = { id: 'p1', eta: 30, nome: 'Mario', ultimo_riepilogo_data: null };
+  const client = createFakeSupabaseClient({ sessioni_sonno: { data: [], error: null } });
+
+  await controllaRiepilogoSettimanale(client, profile, DOMENICA_SERA);
+
+  assert.equal(fetchMock.mock.callCount(), 0);
+  const updateCall = client.calls.find((c) => c.metodo === 'update');
+  assert.equal(updateCall, undefined);
+});
+
+test('controllaRiepilogoSettimanale: invia statistiche, confronto e record, poi aggiorna ultimo_riepilogo_data', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({ ok: true, status: 200 }));
+  const profile = { id: 'p1', eta: 30, nome: 'Mario', ultimo_riepilogo_data: null }; // soglia 9h
+  const sessioni = [
+    ...settimanaDi(SETTIMANA_PRECEDENTE, 10), // media 10h -> sfora di 1h
+    ...settimanaDi(SETTIMANA_CORRENTE, 8), // media 8h -> sotto soglia
+  ];
+  const client = createFakeSupabaseClient({ sessioni_sonno: { data: sessioni, error: null } });
+
+  await controllaRiepilogoSettimanale(client, profile, DOMENICA_SERA);
+
+  assert.equal(fetchMock.mock.callCount(), 1);
+  const testo = corpoMessaggio(fetchMock);
+  assert.match(testo, /07\/09 → 13\/09/);
+  assert.match(testo, /Media giornaliera: 8h 0m \(soglia 9h\)/);
+  assert.match(testo, /Giorni sopra soglia: 0 su 7/);
+  assert.match(testo, /molto meglio: 2h 0m in meno/);
+  assert.match(testo, /🏆 Nuovo record personale!/);
+
+  const updateCall = client.calls.find((c) => c.tabella === 'profiles' && c.metodo === 'update');
+  assert.deepEqual(updateCall.args[0], { ultimo_riepilogo_data: '2026-09-13' });
+});
+
+test('controllaRiepilogoSettimanale: nessun record se una settimana passata è migliore', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({ ok: true, status: 200 }));
+  const profile = { id: 'p1', eta: 30, nome: 'Mario', ultimo_riepilogo_data: null };
+  const sessioni = [
+    ...settimanaDi(SETTIMANA_PRECEDENTE, 10), // media 10h
+    ...settimanaDi(SETTIMANA_CORRENTE, 11), // media 11h, peggiore
+  ];
+  const client = createFakeSupabaseClient({ sessioni_sonno: { data: sessioni, error: null } });
+
+  await controllaRiepilogoSettimanale(client, profile, DOMENICA_SERA);
+
+  const testo = corpoMessaggio(fetchMock);
+  assert.doesNotMatch(testo, /record/);
+  assert.match(testo, /leggermente peggio: 1h 0m in più/);
+  assert.match(testo, /Giorni sopra soglia: 7 su 7/);
+});
+
+test('controllaRiepilogoSettimanale: senza settimana precedente niente frase di confronto né record', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({ ok: true, status: 200 }));
+  const profile = { id: 'p1', eta: 30, nome: 'Mario', ultimo_riepilogo_data: null };
+  const client = createFakeSupabaseClient({
+    sessioni_sonno: { data: settimanaDi(SETTIMANA_CORRENTE, 8), error: null },
+  });
+
+  await controllaRiepilogoSettimanale(client, profile, DOMENICA_SERA);
+
+  const testo = corpoMessaggio(fetchMock);
+  assert.match(testo, /Media giornaliera: 8h 0m/);
+  assert.doesNotMatch(testo, /Rispetto alla settimana scorsa/);
+  assert.doesNotMatch(testo, /record/);
+});
