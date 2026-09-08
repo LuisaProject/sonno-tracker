@@ -112,3 +112,133 @@ test('contaGiorniSenzaRientri: un rientro diurno ieri -> streak 0', () => {
   const sessioni = [{ inizio: '2026-01-14T09:00:00.000Z', fine: null }]; // 10:00 a Roma, ieri
   assert.equal(contaGiorniSenzaRientri(sessioni, oggi), 0);
 });
+
+// --- Raggruppamenti a taglio di calendario -----------------------------------
+
+import {
+  raggruppaPerSettimanaCalendario,
+  raggruppaPerMeseCalendario,
+  trovaRecord,
+  calcolaRiepilogoSettimanale,
+} from '../src/history.js';
+
+// Sessione di 8h che ricade interamente nel giorno locale indicato (Roma).
+function notte(dataLocaleISO, ore = 8) {
+  const inizio = new Date(`${dataLocaleISO}T02:00:00.000Z`); // 03:00/04:00 a Roma: la sessione resta nello stesso giorno locale
+  const fine = new Date(inizio.getTime() + ore * 3_600_000);
+  return { id: `${dataLocaleISO}-${ore}`, inizio: inizio.toISOString(), fine: fine.toISOString() };
+}
+
+test('raggruppaPerSettimanaCalendario: storico vuoto -> nessuna settimana', () => {
+  const now = new Date('2026-09-09T12:00:00.000Z'); // mercoledì
+  assert.deepEqual(raggruppaPerSettimanaCalendario([], now), []);
+});
+
+test('raggruppaPerSettimanaCalendario: una sola settimana (quella in corso) -> completa=false', () => {
+  const now = new Date('2026-09-09T12:00:00.000Z'); // mercoledì 9 settembre 2026
+  const settimane = raggruppaPerSettimanaCalendario([notte('2026-09-08')], now);
+  assert.equal(settimane.length, 1);
+  assert.equal(settimane[0].inizioSettimana, '2026-09-07'); // lunedì
+  assert.equal(settimane[0].fineSettimana, '2026-09-13'); // domenica
+  assert.equal(settimane[0].giorni.length, 7);
+  assert.equal(settimane[0].completa, false);
+});
+
+test('raggruppaPerSettimanaCalendario: copre tutte le settimane dalla più vecchia a quella di now', () => {
+  const now = new Date('2026-09-09T12:00:00.000Z');
+  const settimane = raggruppaPerSettimanaCalendario([notte('2026-08-25'), notte('2026-09-08')], now);
+  assert.deepEqual(
+    settimane.map((s) => s.inizioSettimana),
+    ['2026-08-24', '2026-08-31', '2026-09-07']
+  );
+  assert.deepEqual(settimane.map((s) => s.completa), [true, true, false]);
+});
+
+test('raggruppaPerSettimanaCalendario: la media è la somma delle ore diviso 7 e i giorni sono etichettati per data', () => {
+  const now = new Date('2026-09-09T12:00:00.000Z');
+  const settimane = raggruppaPerSettimanaCalendario([notte('2026-09-08', 14)], now);
+  const settimana = settimane[0];
+  assert.equal(settimana.media, 14 / 7);
+  const martedi = settimana.giorni.find((g) => g.label === '2026-09-08');
+  assert.equal(martedi.ore, 14);
+  assert.equal(settimana.giorni.filter((g) => g.ore === 0).length, 6);
+});
+
+test('raggruppaPerMeseCalendario: storico vuoto -> nessun mese', () => {
+  const now = new Date('2026-09-09T12:00:00.000Z');
+  assert.deepEqual(raggruppaPerMeseCalendario([], now), []);
+});
+
+test('raggruppaPerMeseCalendario: un elemento per mese di calendario, solo l\'ultimo incompleto', () => {
+  const now = new Date('2026-09-09T12:00:00.000Z');
+  const mesi = raggruppaPerMeseCalendario([notte('2026-07-15'), notte('2026-09-08')], now);
+  assert.deepEqual(mesi.map((m) => m.inizioMese), ['2026-07-01', '2026-08-01', '2026-09-01']);
+  assert.deepEqual(mesi.map((m) => m.fineMese), ['2026-07-31', '2026-08-31', '2026-09-30']);
+  assert.deepEqual(mesi.map((m) => m.giorni.length), [31, 31, 30]);
+  assert.deepEqual(mesi.map((m) => m.completa), [true, true, false]);
+});
+
+test('raggruppaPerMeseCalendario: febbraio non bisestile ha 28 giorni', () => {
+  const now = new Date('2026-03-10T12:00:00.000Z');
+  const mesi = raggruppaPerMeseCalendario([notte('2026-02-10')], now);
+  const febbraio = mesi.find((m) => m.inizioMese === '2026-02-01');
+  assert.equal(febbraio.giorni.length, 28);
+  assert.equal(febbraio.fineMese, '2026-02-28');
+});
+
+test('trovaRecord: nessun periodo completo -> null', () => {
+  const now = new Date('2026-09-09T12:00:00.000Z');
+  const settimane = raggruppaPerSettimanaCalendario([notte('2026-09-08')], now);
+  assert.equal(trovaRecord(settimane, 9), null);
+});
+
+test('trovaRecord: elenco vuoto -> null', () => {
+  assert.equal(trovaRecord([], 9), null);
+});
+
+test('trovaRecord: sceglie il periodo completo con lo sforamento medio più basso', () => {
+  const periodi = [
+    { inizioSettimana: '2026-08-24', media: 12, completa: true },
+    { inizioSettimana: '2026-08-31', media: 9.5, completa: true },
+    { inizioSettimana: '2026-09-07', media: 11, completa: false },
+  ];
+  assert.equal(trovaRecord(periodi, 9).inizioSettimana, '2026-08-31');
+});
+
+test('trovaRecord: a parità di sforamento (tutti sotto soglia) vince la media più bassa', () => {
+  const periodi = [
+    { inizioSettimana: '2026-08-24', media: 8.5, completa: true },
+    { inizioSettimana: '2026-08-31', media: 7.2, completa: true },
+  ];
+  assert.equal(trovaRecord(periodi, 9).inizioSettimana, '2026-08-31');
+});
+
+test('trovaRecord: il periodo in corso è escluso anche se avrebbe il valore migliore', () => {
+  const periodi = [
+    { inizioSettimana: '2026-08-24', media: 12, completa: true },
+    { inizioSettimana: '2026-08-31', media: 10, completa: true },
+    { inizioSettimana: '2026-09-07', media: 2, completa: false }, // di gran lunga il migliore
+  ];
+  const record = trovaRecord(periodi, 9);
+  assert.equal(record.inizioSettimana, '2026-08-31');
+  assert.equal(record.completa, true);
+});
+
+test('calcolaRiepilogoSettimanale: media, giorno migliore/peggiore e giorni sopra soglia', () => {
+  const giorni = [
+    { label: '2026-09-07', ore: 6 },
+    { label: '2026-09-08', ore: 12 },
+    { label: '2026-09-09', ore: 9 },
+    { label: '2026-09-10', ore: 10 },
+  ];
+  const riepilogo = calcolaRiepilogoSettimanale(giorni, 9);
+  assert.equal(riepilogo.media, 37 / 4);
+  assert.equal(riepilogo.giornoMigliore.label, '2026-09-07');
+  assert.equal(riepilogo.giornoPeggiore.label, '2026-09-08');
+  assert.equal(riepilogo.giorniSopraSoglia, 2); // 12 e 10; 9 è pari alla soglia, non sopra
+});
+
+test('calcolaRiepilogoSettimanale: elenco vuoto non esplode', () => {
+  const riepilogo = calcolaRiepilogoSettimanale([], 9);
+  assert.deepEqual(riepilogo, { media: 0, giornoMigliore: null, giornoPeggiore: null, giorniSopraSoglia: 0 });
+});

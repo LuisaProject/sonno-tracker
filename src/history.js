@@ -1,3 +1,5 @@
+import { calcolaSforamentoOre } from './soglia.js';
+
 export function isOraDiurna(iso, timeZone = 'Europe/Rome') {
   const ora = Number(
     new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', hour12: false }).format(new Date(iso))
@@ -112,4 +114,173 @@ export function buildYearView(sessions, now = new Date()) {
     });
   }
   return punti;
+}
+
+// --- Raggruppamenti a taglio di calendario -----------------------------------
+// Le viste del grafico storico (buildDayView/WeekView/MonthView/YearView) usano
+// finestre mobili che finiscono "adesso". Le funzioni qui sotto ragionano invece
+// per settimane di calendario (lunedì-domenica) e mesi di calendario
+// (1° - ultimo giorno), e servono ai riepiloghi Telegram e ai record in app.
+//
+// Una "data civile" è rappresentata come timestamp UTC a mezzanotte
+// (Date.UTC(anno, mese-1, giorno)): è solo un contenitore per anno/mese/giorno,
+// non un istante reale, e permette di sommare giorni senza incappare nel DST.
+
+function partiLocali(istante, timeZone) {
+  const parti = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(istante);
+  const mappa = {};
+  for (const p of parti) mappa[p.type] = p.value;
+  return mappa;
+}
+
+function offsetLocaleMs(istante, timeZone) {
+  const p = partiLocali(istante, timeZone);
+  const comeUtc = Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day), Number(p.hour), Number(p.minute), Number(p.second));
+  return comeUtc - istante.getTime();
+}
+
+// Istante reale (UTC) della mezzanotte locale di una data civile.
+// Doppio passaggio per essere corretti anche a cavallo dei cambi di ora legale.
+function istanteMezzanotteLocale(dataCivile, timeZone) {
+  const d = new Date(dataCivile);
+  const target = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0);
+  let ts = target - offsetLocaleMs(new Date(target), timeZone);
+  ts = target - offsetLocaleMs(new Date(ts), timeZone);
+  return new Date(ts);
+}
+
+function dataCivileDaIstante(istante, timeZone) {
+  const [anno, mese, giorno] = dataLocale(istante.toISOString(), timeZone).split('-').map(Number);
+  return Date.UTC(anno, mese - 1, giorno);
+}
+
+function formattaDataCivile(dataCivile) {
+  const d = new Date(dataCivile);
+  const mese = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const giorno = String(d.getUTCDate()).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${mese}-${giorno}`;
+}
+
+function lunediDellaSettimana(dataCivile) {
+  const scarto = (new Date(dataCivile).getUTCDay() + 6) % 7; // 0 = lunedì
+  return dataCivile - scarto * 86_400_000;
+}
+
+function primoDelMese(dataCivile) {
+  const d = new Date(dataCivile);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
+}
+
+function meseSuccessivo(dataCivile) {
+  const d = new Date(dataCivile);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1);
+}
+
+function puntiGiornalieri(sessioni, dataCivileInizio, numeroGiorni, now, timeZone) {
+  const punti = [];
+  for (let i = 0; i < numeroGiorni; i++) {
+    const giornoCivile = dataCivileInizio + i * 86_400_000;
+    const inizio = istanteMezzanotteLocale(giornoCivile, timeZone);
+    const fine = istanteMezzanotteLocale(giornoCivile + 86_400_000, timeZone);
+    punti.push({
+      label: formattaDataCivile(giornoCivile),
+      ore: sommaOreInRange(sessioni, inizio, fine, now),
+    });
+  }
+  return punti;
+}
+
+function mediaGiorni(giorni) {
+  if (giorni.length === 0) return 0;
+  return giorni.reduce((tot, g) => tot + g.ore, 0) / giorni.length;
+}
+
+function dataCivilePiuVecchia(sessioni, timeZone) {
+  return sessioni.reduce((minimo, s) => {
+    const civile = dataCivileDaIstante(new Date(s.inizio), timeZone);
+    return minimo === null || civile < minimo ? civile : minimo;
+  }, null);
+}
+
+export function raggruppaPerSettimanaCalendario(sessioni, now, timeZone = 'Europe/Rome') {
+  const elenco = sessioni ?? [];
+  if (elenco.length === 0) return [];
+
+  const primoLunedi = lunediDellaSettimana(dataCivilePiuVecchia(elenco, timeZone));
+  const lunediCorrente = lunediDellaSettimana(dataCivileDaIstante(now, timeZone));
+
+  const settimane = [];
+  for (let lunedi = primoLunedi; lunedi <= lunediCorrente; lunedi += 7 * 86_400_000) {
+    const giorni = puntiGiornalieri(elenco, lunedi, 7, now, timeZone);
+    settimane.push({
+      inizioSettimana: formattaDataCivile(lunedi),
+      fineSettimana: formattaDataCivile(lunedi + 6 * 86_400_000),
+      giorni,
+      media: mediaGiorni(giorni),
+      completa: lunedi < lunediCorrente,
+    });
+  }
+  return settimane;
+}
+
+export function raggruppaPerMeseCalendario(sessioni, now, timeZone = 'Europe/Rome') {
+  const elenco = sessioni ?? [];
+  if (elenco.length === 0) return [];
+
+  const primoMese = primoDelMese(dataCivilePiuVecchia(elenco, timeZone));
+  const meseCorrente = primoDelMese(dataCivileDaIstante(now, timeZone));
+
+  const mesi = [];
+  for (let mese = primoMese; mese <= meseCorrente; mese = meseSuccessivo(mese)) {
+    const inizioProssimo = meseSuccessivo(mese);
+    const numeroGiorni = Math.round((inizioProssimo - mese) / 86_400_000);
+    const giorni = puntiGiornalieri(elenco, mese, numeroGiorni, now, timeZone);
+    mesi.push({
+      inizioMese: formattaDataCivile(mese),
+      fineMese: formattaDataCivile(inizioProssimo - 86_400_000),
+      giorni,
+      media: mediaGiorni(giorni),
+      completa: mese < meseCorrente,
+    });
+  }
+  return mesi;
+}
+
+// Un periodo batte l'altro se sfora meno la soglia. A parità di sforamento
+// (tipicamente zero: entrambi sotto soglia) vince la media più bassa, altrimenti
+// con tutti i periodi sotto soglia il "record" sarebbe sempre il più vecchio.
+export function battePeriodo(candidato, riferimento, soglia) {
+  if (!riferimento) return true;
+  const sforamentoCandidato = calcolaSforamentoOre(candidato.media, soglia);
+  const sforamentoRiferimento = calcolaSforamentoOre(riferimento.media, soglia);
+  if (sforamentoCandidato !== sforamentoRiferimento) return sforamentoCandidato < sforamentoRiferimento;
+  return candidato.media < riferimento.media;
+}
+
+export function trovaRecord(periodi, soglia) {
+  const completi = (periodi ?? []).filter((p) => p.completa);
+  if (completi.length === 0) return null;
+  return completi.reduce((migliore, periodo) => (battePeriodo(periodo, migliore, soglia) ? periodo : migliore), null);
+}
+
+export function calcolaRiepilogoSettimanale(giorni, soglia) {
+  const elenco = giorni ?? [];
+  if (elenco.length === 0) {
+    return { media: 0, giornoMigliore: null, giornoPeggiore: null, giorniSopraSoglia: 0 };
+  }
+  return {
+    media: mediaGiorni(elenco),
+    giornoMigliore: elenco.reduce((min, g) => (g.ore < min.ore ? g : min)),
+    giornoPeggiore: elenco.reduce((max, g) => (g.ore > max.ore ? g : max)),
+    giorniSopraSoglia: elenco.filter((g) => g.ore > soglia).length,
+  };
 }
