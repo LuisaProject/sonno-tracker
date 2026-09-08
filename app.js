@@ -409,43 +409,53 @@ el.formSessioneManuale.addEventListener('submit', onAggiungiSessioneManuale);
 
 async function onAggiungiSessioneManuale(ev) {
   ev.preventDefault();
-  const inizioValore = el.manualeInizio.value;
-  const fineValore = el.manualeFine.value;
-  if (!inizioValore || !fineValore) {
-    alert('Inserisci sia l\'inizio che la fine della sessione.');
-    return;
-  }
+  try {
+    const inizioValore = el.manualeInizio.value;
+    const fineValore = el.manualeFine.value;
+    if (!inizioValore || !fineValore) {
+      alert('Inserisci sia l\'inizio che la fine della sessione.');
+      return;
+    }
 
-  const inizioISO = new Date(inizioValore).toISOString();
-  const fineISO = new Date(fineValore).toISOString();
-  if (new Date(fineISO) <= new Date(inizioISO)) {
-    alert('La fine deve essere dopo l\'inizio.');
-    return;
-  }
+    // new Date(stringaNonValida) non lancia: produce un Invalid Date silenzioso.
+    // È .toISOString() a lanciare RangeError su un Invalid Date: può succedere
+    // se <input type="datetime-local"> non è supportato (es. Safari/iOS datati)
+    // e il campo diventa un testo libero che l'utente può scrivere in un
+    // formato che il browser non riconosce.
+    const inizioISO = new Date(inizioValore).toISOString();
+    const fineISO = new Date(fineValore).toISOString();
+    if (new Date(fineISO) <= new Date(inizioISO)) {
+      alert('La fine deve essere dopo l\'inizio.');
+      return;
+    }
 
-  const conflitto = sessioneSovrapposta({ inizio: inizioISO, fine: fineISO }, sessioniComplete);
-  if (conflitto) {
-    const inizioConflitto = new Date(conflitto.inizio).toLocaleString('it-IT');
-    const fineConflitto = conflitto.fine ? new Date(conflitto.fine).toLocaleString('it-IT') : 'in corso';
-    alert(`Questo intervallo si sovrappone a una sessione già registrata (${inizioConflitto} → ${fineConflitto}).`);
-    return;
-  }
+    const conflitto = sessioneSovrapposta({ inizio: inizioISO, fine: fineISO }, sessioniComplete);
+    if (conflitto) {
+      const inizioConflitto = new Date(conflitto.inizio).toLocaleString('it-IT');
+      const fineConflitto = conflitto.fine ? new Date(conflitto.fine).toLocaleString('it-IT') : 'in corso';
+      alert(`Questo intervallo si sovrappone a una sessione già registrata (${inizioConflitto} → ${fineConflitto}).`);
+      return;
+    }
 
-  const { error } = await supabaseClient.from('sessioni_sonno').insert({
-    id: crypto.randomUUID(),
-    user_id: currentUser.id,
-    inizio: inizioISO,
-    fine: fineISO,
-  });
-  if (error) {
-    alert(error.message);
-    return;
-  }
+    const { error } = await supabaseClient.from('sessioni_sonno').insert({
+      id: crypto.randomUUID(),
+      user_id: currentUser.id,
+      inizio: inizioISO,
+      fine: fineISO,
+    });
+    if (error) {
+      alert(error.message);
+      return;
+    }
 
-  el.formSessioneManuale.reset();
-  await caricaStoricoCompleto();
-  await renderSessioniRecenti();
-  await renderStorico();
+    el.formSessioneManuale.reset();
+    await caricaStoricoCompleto();
+    await renderSessioniRecenti();
+    await renderStorico();
+  } catch (error) {
+    console.error(error);
+    alert('Errore nell\'inserimento: ' + error.message + ' — controlla il formato di data/ora inserito.');
+  }
 }
 
 init();
