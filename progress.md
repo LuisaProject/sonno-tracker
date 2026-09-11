@@ -1,5 +1,51 @@
 # sonno-tracker — stato del progetto
 
+## Sessione 11/09/2026 — modifica sessioni e grafico progressi
+
+### Cosa è stato fatto
+1. **Modifica di una sessione già registrata** — pulsante "Modifica" in ogni riga
+   di "Sessioni recenti", che riusa il form manuale (`sessioneInModifica` decide
+   se il submit fa UPDATE o INSERT).
+2. **Scheda Settimana di default** nello storico (prima era Giorno).
+3. **Nuovo grafico "Andamento progressi"** — barre con i giorni sopra soglia
+   delle ultime 10 settimane di calendario, istanza Chart.js separata.
+
+### Decisioni e perché
+- **Il controllo di sovrapposizione esclude la sessione in modifica da sé stessa**
+  (`sessioniComplete.filter(s => s.id !== sessioneInModifica)`): senza il filtro
+  ogni salvataggio sarebbe bloccato da un conflitto con sé stessa.
+- **Conversione ISO → input datetime-local con i getter locali**
+  (`formattaPerInputLocale`), mai con `toISOString().slice(0,16)`: quello darebbe
+  l'ora UTC e mostrerebbe orari sfasati di 1-2 ore.
+- **Dopo un UPDATE si chiama `sincronizzaCodaLocale`** come fa "Chiudi ora":
+  modificando una sessione ancora aperta, senza questo il pulsante principale
+  resterebbe su "Mi sono alzato" e un successivo stop la riscriverebbe.
+- **Sessione aperta in modifica: campo fine vuoto e obbligatorio.** L'orario di
+  fine reale lo conosce solo l'utente, non ha senso precompilarlo con "adesso".
+- **Grafico progressi a serie singola**: un solo colore (`#546e7a`), niente
+  legenda, asse Y a numeri interi con massimo 7 (i giorni di una settimana).
+
+### Aperto / da decidere
+- **L'anello della soglia ora è nascosto all'apertura.** `aggiornaRiquadroSoglia`
+  mostra l'anello solo con la scheda "Giorno" attiva: con il default spostato su
+  "Settimana" l'anello compare solo cliccando Giorno. Se va mostrato sempre,
+  serve staccare la visibilità dell'anello dalla scheda attiva.
+
+### Migrazioni Supabase da eseguire a mano
+```sql
+alter table profiles add column if not exists ultimo_riepilogo_data date;
+alter table profiles add column if not exists ultimo_riepilogo_mensile_data date;
+```
+Senza queste colonne i due riepiloghi inviano il messaggio e poi falliscono
+sull'update di deduplica: il workflow va in errore e il messaggio si ripete a
+ogni run del cron finché la finestra oraria è aperta.
+
+### Copertura test
+124 test verdi (`npm test`). **Non coperti da test**: `app.js`, `index.html`,
+`style.css` — il progetto non ha test di interfaccia.
+
+---
+
 ## Sessione 08/09/2026 — riepiloghi periodici, record, ottimizzazione fetch
 
 ### Cosa è stato fatto
