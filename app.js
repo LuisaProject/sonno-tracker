@@ -362,10 +362,6 @@ const RAGGIO_ANELLO = 108;
 const CIRCONFERENZA_ANELLO = 2 * Math.PI * RAGGIO_ANELLO;
 
 function aggiornaRiquadroSoglia(sessioni, soglia, now) {
-  if (periodoAttivo !== 'giorno') {
-    el.anelloSoglia.hidden = true;
-    return;
-  }
   const rangeStart = new Date(now.getTime() - 24 * 3_600_000);
   const oreALetto = sommaOreInRange(sessioni, rangeStart, now);
   const stato = calcolaStatoAnello(oreALetto, soglia);
