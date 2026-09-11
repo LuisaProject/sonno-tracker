@@ -337,3 +337,15 @@ export function formattaPerInputLocale(iso) {
   const due = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${due(d.getMonth() + 1)}-${due(d.getDate())}T${due(d.getHours())}:${due(d.getMinutes())}`;
 }
+
+// Quanti giorni sopra soglia in ciascuna delle ultime `numSettimane` settimane di
+// calendario (lunedì-domenica), dalla più vecchia alla più recente: serve al
+// grafico "Andamento progressi", che mostra se gli sforamenti calano nel tempo.
+export function buildProgressiSettimanali(sessioni, now, soglia, numSettimane = 10) {
+  return raggruppaPerSettimanaCalendario(sessioni, now)
+    .slice(-numSettimane)
+    .map((settimana) => ({
+      label: settimana.inizioSettimana.split('-').slice(1).reverse().join('/'), // '2026-09-07' -> '07/09'
+      giorniSopraSoglia: calcolaRiepilogoSettimanale(settimana.giorni, soglia).giorniSopraSoglia,
+    }));
+}

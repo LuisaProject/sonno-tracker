@@ -17,6 +17,7 @@ import {
   calcolaRangeFetch,
   sessioneSovrapposta,
   formattaPerInputLocale,
+  buildProgressiSettimanali,
 } from './src/history.js';
 import { formattaRigaSessione } from './src/sessioni-recenti.js';
 
@@ -41,6 +42,7 @@ const el = {
   anelloSottotitolo: document.getElementById('anello-sottotitolo'),
   periodoSelector: document.getElementById('periodo-selector'),
   graficoCanvas: document.getElementById('grafico-storico'),
+  graficoProgressi: document.getElementById('grafico-progressi'),
   listaSessioniRecenti: document.getElementById('lista-sessioni-recenti'),
   streakRientri: document.getElementById('streak-rientri'),
   recordSettimana: document.getElementById('record-settimana'),
@@ -185,6 +187,7 @@ async function caricaStoricoCompleto() {
   }
   sessioniComplete = data ?? [];
   renderRecord();
+  renderProgressi();
   // Lo streak guarda indietro fino a un anno: va calcolato sullo storico
   // completo, non sulla finestra ridotta che scarica renderStorico.
   aggiornaStreakRientri(sessioniComplete, new Date());
@@ -221,6 +224,42 @@ function renderRecord() {
   );
 }
 
+// Grafico separato da quello dello storico: barre con i giorni sopra soglia di
+// ciascuna delle ultime 10 settimane di calendario, per vedere se gli
+// sforamenti calano nel tempo. Istanza Chart distinta da `chart`.
+let chartProgressi = null;
+
+function renderProgressi() {
+  if (!currentProfile) return;
+  const soglia = currentProfile.soglia_manuale_ore ?? getSogliaMassimaOre(currentProfile.eta);
+  const progressi = buildProgressiSettimanali(sessioniComplete, new Date(), soglia);
+
+  const dati = {
+    labels: progressi.map((p) => p.label),
+    datasets: [
+      {
+        label: 'Giorni sopra soglia',
+        data: progressi.map((p) => p.giorniSopraSoglia),
+        backgroundColor: '#546e7a',
+        borderRadius: 4,
+      },
+    ],
+  };
+  const opzioni = {
+    responsive: true,
+    // Serie singola: la legenda ripeterebbe solo il titolo della sezione.
+    plugins: { legend: { display: false } },
+    scales: { y: { beginAtZero: true, max: 7, ticks: { stepSize: 1, precision: 0 } } },
+  };
+
+  if (chartProgressi) {
+    chartProgressi.data = dati;
+    chartProgressi.update();
+  } else {
+    chartProgressi = new Chart(el.graficoProgressi, { type: 'bar', data: dati, options: opzioni });
+  }
+}
+
 async function sincronizza() {
   if (loadQueue(storage).length > 0) {
     el.syncIndicator.hidden = false;
@@ -242,7 +281,9 @@ if ('serviceWorker' in navigator) {
 }
 
 let chart = null;
-let periodoAttivo = 'giorno';
+// Default Settimana: all'apertura serve il confronto tra i giorni, non la
+// vista oraria delle ultime 24 ore.
+let periodoAttivo = 'settimana';
 
 el.periodoSelector.addEventListener('click', (ev) => {
   const periodo = ev.target.dataset.periodo;

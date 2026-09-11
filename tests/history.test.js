@@ -369,3 +369,44 @@ test('formattaPerInputLocale: valore assente -> stringa vuota (campo lasciato vu
   assert.equal(formattaPerInputLocale(undefined), '');
   assert.equal(formattaPerInputLocale(''), '');
 });
+
+import { buildProgressiSettimanali } from '../src/history.js';
+
+test('buildProgressiSettimanali: una barra per settimana con i giorni sopra soglia', () => {
+  const now = new Date('2026-09-09T12:00:00.000Z'); // mercoledì, settimana del 07/09
+  const sessioni = [
+    // settimana del 31/08: due giorni sopra soglia (9h il 02/09, 9h il 04/09)
+    { id: 'a', inizio: '2026-09-01T21:00:00.000Z', fine: '2026-09-02T07:00:00.000Z' },
+    { id: 'b', inizio: '2026-09-03T21:00:00.000Z', fine: '2026-09-04T07:00:00.000Z' },
+    // settimana del 07/09: un giorno sopra soglia
+    { id: 'c', inizio: '2026-09-07T20:00:00.000Z', fine: '2026-09-08T07:00:00.000Z' },
+  ];
+  const progressi = buildProgressiSettimanali(sessioni, now, 8);
+  assert.equal(progressi.length, 2);
+  assert.deepEqual(progressi.map((p) => p.label), ['31/08', '07/09']);
+  assert.deepEqual(progressi.map((p) => p.giorniSopraSoglia), [2, 1]);
+});
+
+test('buildProgressiSettimanali: tiene solo le ultime N settimane', () => {
+  const now = new Date('2026-09-09T12:00:00.000Z');
+  const sessioni = [
+    { id: 'vecchia', inizio: '2026-05-04T22:00:00.000Z', fine: '2026-05-05T06:00:00.000Z' },
+    { id: 'recente', inizio: '2026-09-07T22:00:00.000Z', fine: '2026-09-08T06:00:00.000Z' },
+  ];
+  const tutte = buildProgressiSettimanali(sessioni, now, 8, 100);
+  assert.ok(tutte.length > 3);
+  const ultime = buildProgressiSettimanali(sessioni, now, 8, 3);
+  assert.equal(ultime.length, 3);
+  assert.equal(ultime.at(-1).label, '07/09'); // l'ultima è sempre la settimana corrente
+  assert.deepEqual(ultime.map((p) => p.label), tutte.slice(-3).map((p) => p.label));
+});
+
+test('buildProgressiSettimanali: default a 10 settimane', () => {
+  const now = new Date('2026-09-09T12:00:00.000Z');
+  const sessioni = [{ id: 'vecchia', inizio: '2026-01-05T22:00:00.000Z', fine: '2026-01-06T06:00:00.000Z' }];
+  assert.equal(buildProgressiSettimanali(sessioni, now, 8).length, 10);
+});
+
+test('buildProgressiSettimanali: nessuna sessione -> nessuna barra', () => {
+  assert.deepEqual(buildProgressiSettimanali([], new Date('2026-09-09T12:00:00.000Z'), 8), []);
+});
