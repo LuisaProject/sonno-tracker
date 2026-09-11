@@ -342,3 +342,30 @@ test('sessioneSovrapposta: elenco vuoto -> nessun conflitto', () => {
   const nuova = { inizio: '2026-09-08T22:00:00.000Z', fine: '2026-09-09T06:00:00.000Z' };
   assert.equal(sessioneSovrapposta(nuova, []), null);
 });
+
+import { formattaPerInputLocale } from '../src/history.js';
+
+test('formattaPerInputLocale: produce il formato che <input type="datetime-local"> si aspetta', () => {
+  assert.match(formattaPerInputLocale('2026-09-08T22:05:00.000Z'), /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+});
+
+test('formattaPerInputLocale: rispetta il fuso locale (andata e ritorno sullo stesso istante)', () => {
+  // new Date('YYYY-MM-DDTHH:mm') senza suffisso Z è interpretata come ora locale:
+  // se la conversione fosse fatta con toISOString() (ora UTC) questo test fallirebbe
+  // in ogni fuso diverso da UTC.
+  for (const iso of ['2026-09-08T22:05:00.000Z', '2026-01-15T03:40:00.000Z', '2026-06-30T23:59:00.000Z']) {
+    const atteso = new Date(iso).getTime() - new Date(iso).getSeconds() * 1000 - new Date(iso).getMilliseconds();
+    assert.equal(new Date(formattaPerInputLocale(iso)).getTime(), atteso);
+  }
+});
+
+test('formattaPerInputLocale: mese, giorno, ora e minuti sono sempre a due cifre', () => {
+  // Istante scelto in modo che l'ora locale resti a una cifra in tutta Europa.
+  assert.match(formattaPerInputLocale('2026-01-05T06:07:00.000Z'), /^2026-01-0\dT0\d:\d{2}$/);
+});
+
+test('formattaPerInputLocale: valore assente -> stringa vuota (campo lasciato vuoto)', () => {
+  assert.equal(formattaPerInputLocale(null), '');
+  assert.equal(formattaPerInputLocale(undefined), '');
+  assert.equal(formattaPerInputLocale(''), '');
+});

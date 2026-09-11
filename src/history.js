@@ -327,3 +327,13 @@ export function sessioneSovrapposta(nuovaSessione, sessioniEsistenti, now = new 
   }
   return null;
 }
+
+// ISO -> 'YYYY-MM-DDTHH:mm' in ora locale, il formato che <input type="datetime-local">
+// si aspetta. NON si può usare toISOString().slice(0, 16): darebbe l'ora UTC e il
+// campo mostrerebbe un orario sfasato rispetto a quello registrato.
+export function formattaPerInputLocale(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const due = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${due(d.getMonth() + 1)}-${due(d.getDate())}T${due(d.getHours())}:${due(d.getMinutes())}`;
+}

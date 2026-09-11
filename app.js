@@ -16,6 +16,7 @@ import {
   formattaIntervalloDate,
   calcolaRangeFetch,
   sessioneSovrapposta,
+  formattaPerInputLocale,
 } from './src/history.js';
 import { formattaRigaSessione } from './src/sessioni-recenti.js';
 
@@ -49,6 +50,8 @@ const el = {
   formSessioneManuale: document.getElementById('form-sessione-manuale'),
   manualeInizio: document.getElementById('manuale-inizio'),
   manualeFine: document.getElementById('manuale-fine'),
+  btnSubmitManuale: document.getElementById('btn-submit-manuale'),
+  btnAnnullaModifica: document.getElementById('btn-annulla-modifica'),
 };
 
 function mostraSchermata(nome) {
@@ -362,6 +365,11 @@ async function renderSessioniRecenti() {
       li.appendChild(btnChiudi);
     }
 
+    const btnModifica = document.createElement('button');
+    btnModifica.textContent = 'Modifica';
+    btnModifica.addEventListener('click', () => avviaModificaSessione(sessione));
+    li.appendChild(btnModifica);
+
     const btnElimina = document.createElement('button');
     btnElimina.textContent = 'Elimina';
     btnElimina.addEventListener('click', () => eliminaSessione(sessione.id));
@@ -405,6 +413,29 @@ async function eliminaSessione(id) {
   await renderStorico();
 }
 
+// id della sessione che il form sta modificando, null quando il form è in
+// modalità "aggiungi". Decide se il submit fa un UPDATE o un INSERT.
+let sessioneInModifica = null;
+
+function avviaModificaSessione(sessione) {
+  sessioneInModifica = sessione.id;
+  el.manualeInizio.value = formattaPerInputLocale(sessione.inizio);
+  // Sessione ancora aperta: il campo resta vuoto, l'orario di fine reale lo
+  // conosce solo l'utente ed è obbligatorio inserirlo.
+  el.manualeFine.value = formattaPerInputLocale(sessione.fine);
+  el.btnSubmitManuale.textContent = 'Salva modifica';
+  el.btnAnnullaModifica.hidden = false;
+  el.formSessioneManuale.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function annullaModifica() {
+  sessioneInModifica = null;
+  el.formSessioneManuale.reset();
+  el.btnSubmitManuale.textContent = 'Aggiungi';
+  el.btnAnnullaModifica.hidden = true;
+}
+
+el.btnAnnullaModifica.addEventListener('click', annullaModifica);
 el.formSessioneManuale.addEventListener('submit', onAggiungiSessioneManuale);
 
 async function onAggiungiSessioneManuale(ev) {
@@ -429,7 +460,10 @@ async function onAggiungiSessioneManuale(ev) {
       return;
     }
 
-    const conflitto = sessioneSovrapposta({ inizio: inizioISO, fine: fineISO }, sessioniComplete);
+    // La sessione in modifica va esclusa dal confronto: altrimenti risulterebbe
+    // sempre sovrapposta a sé stessa e il salvataggio sarebbe sempre bloccato.
+    const altreSessioni = sessioniComplete.filter((s) => s.id !== sessioneInModifica);
+    const conflitto = sessioneSovrapposta({ inizio: inizioISO, fine: fineISO }, altreSessioni);
     if (conflitto) {
       const inizioConflitto = new Date(conflitto.inizio).toLocaleString('it-IT');
       const fineConflitto = conflitto.fine ? new Date(conflitto.fine).toLocaleString('it-IT') : 'in corso';
@@ -437,18 +471,33 @@ async function onAggiungiSessioneManuale(ev) {
       return;
     }
 
-    const { error } = await supabaseClient.from('sessioni_sonno').insert({
-      id: crypto.randomUUID(),
-      user_id: currentUser.id,
-      inizio: inizioISO,
-      fine: fineISO,
-    });
-    if (error) {
-      alert(error.message);
-      return;
+    if (sessioneInModifica) {
+      const { error } = await supabaseClient
+        .from('sessioni_sonno')
+        .update({ inizio: inizioISO, fine: fineISO })
+        .eq('id', sessioneInModifica);
+      if (error) {
+        alert(error.message);
+        return;
+      }
+      // Se la sessione modificata era ancora aperta nella coda locale va chiusa
+      // anche lì, come fa "Chiudi ora": altrimenti il pulsante resterebbe su
+      // "Mi sono alzato" e un successivo stop la riscriverebbe.
+      sincronizzaCodaLocale(sessioneInModifica, fineISO);
+    } else {
+      const { error } = await supabaseClient.from('sessioni_sonno').insert({
+        id: crypto.randomUUID(),
+        user_id: currentUser.id,
+        inizio: inizioISO,
+        fine: fineISO,
+      });
+      if (error) {
+        alert(error.message);
+        return;
+      }
     }
 
-    el.formSessioneManuale.reset();
+    annullaModifica();
     await caricaStoricoCompleto();
     await renderSessioniRecenti();
     await renderStorico();
